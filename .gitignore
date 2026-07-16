@@ -1,0 +1,10 @@
+## IDEs
+/.idea
+/.vscode
+
+## Binaries
+/app
+
+## Temp dirs & trash
+/temp
+/tmp
