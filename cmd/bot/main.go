@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/app/app"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/bot/app"
 )
 
 func main() {

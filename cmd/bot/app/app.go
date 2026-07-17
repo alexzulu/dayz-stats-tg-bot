@@ -189,6 +189,16 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 		opt.TGMessageID = msgID // update the message ID for future edits
 	}
 
+	defer func() {
+		if _, err := bot.Edit(
+			&tele.Message{ID: opt.TGMessageID, Chat: &tele.Chat{ID: opt.TGChatID}},
+			"||🛑 Bot offline||",
+			&tele.SendOptions{ThreadID: opt.TGThreadID, ParseMode: tele.ModeMarkdownV2},
+		); err != nil {
+			log.Error("Failed to update message to indicate bot offline", slog.Any("error", err))
+		}
+	}()
+
 	var (
 		startedAt        = time.Now()
 		lastServerDownAt *time.Time
@@ -302,7 +312,7 @@ func (*App) sendInitMessage(bot *tele.Bot, opt opts) (int, error) {
 // updateMessageInfo updates the specified Telegram message with the latest server information.
 func (*App) updateMessageInfo(bot *tele.Bot, opt opts, info dayz_server.ServerInfo) error {
 	var text strings.Builder
-	text.Grow(256) //nolint:mnd // preallocate some space for the message
+	text.Grow(128) //nolint:mnd // preallocate some space for the message
 
 	text.WriteString("🎮 *Игроков* \\(online\\): ")
 	text.WriteRune('*')
@@ -320,9 +330,9 @@ func (*App) updateMessageInfo(bot *tele.Bot, opt opts, info dayz_server.ServerIn
 			text.WriteString("🌙 ")
 		}
 
-		text.WriteString("Местное *время*: ")
+		text.WriteString("*Время*: ")
 		_, _ = fmt.Fprintf(&text, "*%02d:%02d*", info.ServerTime[0], info.ServerTime[1])
-		text.WriteRune('\n')
+		text.WriteString(" \\(местное\\)\n")
 	}
 
 	pimgMicro := info.Ping.Microseconds()
