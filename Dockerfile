@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM docker.io/library/golang:1.26.3-alpine AS compiler
+FROM docker.io/library/golang:1.26.5-alpine AS compiler
 
 COPY . /src
 WORKDIR /src
