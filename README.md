@@ -98,5 +98,5 @@ All flags can also be set via environment variables where noted.
 ## Building
 
 ```bash
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ./bot ./cmd/bot
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ./bot ./cmd/bot/
 ```

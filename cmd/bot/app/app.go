@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -86,6 +87,10 @@ func NewApp(name string) *App {
 // Run parses the command-line arguments, validates them, and starts the main application logic.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if err := a.flagSet.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+
 		return err
 	}
 
