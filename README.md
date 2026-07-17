@@ -7,7 +7,7 @@ counter; when the bot shuts down gracefully, it marks the message as offline.
 ## Requirements
 
 - A Telegram **group with Topics (forum mode) enabled**
-- Go 1.24+ to build from source
+- Go 1.26+ to build from source
 
 ## Setup
 
