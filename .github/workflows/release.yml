@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# docs: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+
+name: 🚀 Release
+
+on:
+  release: {types: [published]}
+  workflow_dispatch: {}
+
+jobs:
+  build-docker-image:
+    name: Build the docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: gacts/github-slug@v1
+        id: slug
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ steps.slug.outputs.version-semantic }}
+            ghcr.io/${{ github.repository }}:${{ steps.slug.outputs.version-major }}.${{ steps.slug.outputs.version-minor }}
+            ghcr.io/${{ github.repository }}:${{ steps.slug.outputs.version-major }}
+
+  build-bin:
+    name: Build the binaries
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with: {go-version-file: go.mod}
+      - run: go build -trimpath -ldflags "-s -w" -o ./bot${{ matrix.os == 'windows' && '.exe' || '' }} ./cmd/bot/
+        env: {CGO_ENABLED: 0, GOOS: '${{ matrix.os }}', GOARCH: '${{ matrix.arch }}'}
+      - run: |
+          ext="${{ matrix.os == 'windows' && '.exe' || '' }}"
+          tar czf "bot-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "bot${ext}"
+          zip "bot-${{ matrix.os }}-${{ matrix.arch }}.zip" "bot${ext}"
+      - uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: bot-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          tag: ${{ github.ref }}
+      - uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: bot-${{ matrix.os }}-${{ matrix.arch }}.zip
+          tag: ${{ github.ref }}
