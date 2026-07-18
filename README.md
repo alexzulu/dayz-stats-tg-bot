@@ -142,7 +142,9 @@ This guide covers deploying the bot as a systemd service on a Linux VPS. All com
 # create a dedicated system user
 useradd --system --home-dir /home/telegram-bot --create-home --shell /usr/sbin/nologin telegram-bot
 
-# place the binary, downloaded from the latest release at `/home/telegram-bot/bot` (e.g. via curl + tar)
+# download and extract the latest release binary
+curl -fsSL "https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest/download/bot-linux-amd64.tar.gz" \
+  | tar -xzf - -C /home/telegram-bot/
 
 # set the correct owner and make it executable
 chown telegram-bot:telegram-bot /home/telegram-bot/bot
@@ -223,8 +225,12 @@ logrotate -f /etc/logrotate.d/bot # force an immediate rotation
 ### Updating the bot
 
 ```bash
-# download the new binary (e.g. via curl + tar) and place it in `/home/telegram-bot/bot-new`.
 # all the commands below are run as root
+
+# download the new binary into /tmp, then swap it in
+curl -fsSL "https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest/download/bot-linux-amd64.tar.gz" \
+  | tar -xzf - -C /tmp/
+mv /tmp/bot /home/telegram-bot/bot-new
 
 # stop the running service, replace the binary, and start it back
 systemctl stop bot.service
