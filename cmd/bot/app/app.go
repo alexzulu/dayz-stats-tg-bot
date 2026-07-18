@@ -340,10 +340,10 @@ func (*App) updateMessageInfo(bot *tele.Bot, opt opts, info dayz_server.ServerIn
 		text.WriteString(" \\(местное\\)\n")
 	}
 
-	pimgMicro := info.Ping.Microseconds()
+	pingMicro := info.Ping.Microseconds()
 
 	text.WriteString("🏁 *Пинг*: ")                                        // e.g. `100.32 ms`
-	_, _ = fmt.Fprintf(&text, "*%d*\\.%d", pimgMicro/1000, pimgMicro%100) //nolint:mnd
+	_, _ = fmt.Fprintf(&text, "*%d*\\.%d", pingMicro/1000, pingMicro%100) //nolint:mnd
 	text.WriteString(" мс")
 
 	if _, err := bot.Edit(

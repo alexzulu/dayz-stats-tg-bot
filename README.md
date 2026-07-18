@@ -107,34 +107,23 @@ CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ./bot ./cmd/bot/
 
 This guide covers deploying the bot as a systemd service on a Linux VPS. All commands are run as root.
 
-First, connect to your server via ssh, and create a dedicated system user:
-
 ```bash
+# create a dedicated system user
 useradd --system --home-dir /home/telegram-bot --create-home --shell /usr/sbin/nologin telegram-bot
-```
 
-Place the binary, downloaded from the [latest release](https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest)
-at `/home/telegram-bot/bot`. Set the correct owner and make it executable:
+# place the binary, downloaded from the latest release at `/home/telegram-bot/bot` (e.g. via curl + tar)
 
-```bash
+# set the correct owner and make it executable
 chown telegram-bot:telegram-bot /home/telegram-bot/bot
 chmod 755 /home/telegram-bot/bot
-```
 
-Create the log file:
-
-```bash
+# create the log file
 touch /var/log/bot.log
 chmod 644 /var/log/bot.log
-```
 
-Create the systemd unit file:
-
-```bash
+# create the systemd unit file
 nano /etc/systemd/system/bot.service
 ```
-
-Paste the following, replacing the `ExecStart` arguments with your actual values (see [Configuration](#configuration)):
 
 ```ini
 [Unit]
@@ -147,7 +136,8 @@ Type=simple
 User=telegram-bot
 Group=telegram-bot
 WorkingDirectory=/home/telegram-bot
-ExecStart=/home/telegram-bot/bot --server-address 123.123.123.123:27016 --tg-bot-token 1234567890:XXXXXXXXXXXXXXXXX --tg-thread-id 11 --tg-chat-id -1002222222222 --tg-message-id 33
+Environment="TG_BOT_TOKEN=1234567890:XXXXXXXXXXXXXXXXX"
+ExecStart=/home/telegram-bot/bot --server-address 123.123.123.123:27016 --tg-thread-id 11 --tg-chat-id -1002222222222 --tg-message-id 33
 
 Restart=on-failure
 RestartSec=5
@@ -164,38 +154,20 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-`Restart=on-failure` ensures the bot recovers automatically after a crash. The hardening directives
-(`NoNewPrivileges`, `ProtectSystem`, `ProtectHome`, `PrivateTmp`) sandbox the service so it can't touch anything
-outside its working directory.
-
-Reload systemd to pick up the new unit, then enable and start the service in one go:
-
 ```bash
+# reload systemd to pick up the new unit, then enable and start the service
 systemctl daemon-reload
 systemctl enable --now bot.service
-```
-
-Verify it is running:
-
-```bash
 systemctl status bot.service
-```
 
-Tail the logs to confirm there are no errors:
-
-```bash
+# check the logs to confirm the bot is running
 tail -f /var/log/bot.log
-```
 
-### Log rotation
-
-Without rotation, `/var/log/bot.log` will grow indefinitely. Configure logrotate to keep 8 weekly compressed archives:
-
-```bash
+# create a logrotate config for the bot logs
 nano /etc/logrotate.d/bot
 ```
 
-```
+```text
 /var/log/bot.log {
     weekly
     rotate 8
@@ -207,40 +179,11 @@ nano /etc/logrotate.d/bot
 }
 ```
 
-Dry-run to check the config is valid:
-
 ```bash
-logrotate -d /etc/logrotate.d/bot
-```
-
-Force an immediate rotation to verify it works end-to-end:
-
-```bash
-logrotate -f /etc/logrotate.d/bot
+logrotate -d /etc/logrotate.d/bot # dry-run to check the config is valid
+logrotate -f /etc/logrotate.d/bot # force an immediate rotation
 ```
 
 > [!NOTE]
-> On some Ubuntu installations `/var/log` is group-writable, which causes logrotate to refuse rotating files inside it:
->
-> ```
-> error: skipping "/var/log/bot.log" because parent directory has insecure permissions
-> (It's world writable or writable by group which is not "root")
-> ```
->
-> Check your permissions:
->
-> ```bash
-> ls -ld /var/log
-> ```
->
-> If you see `drwxrwxr-x`, fix it:
->
-> ```bash
-> chmod 755 /var/log
-> ```
-
-Reboot the server and confirm the bot starts automatically:
-
-```bash
-reboot
-```
+> On some Ubuntu installations `/var/log` is group-writable, which causes logrotate to fail with
+> `error: skipping "/var/log/bot.log" because parent directory has insecure permissions`. Fix: `chmod 755 /var/log`
