@@ -168,7 +168,13 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 	defer func() { _, _ = bot.Close() }()
 
 	// reply to any text message with a simple "hello" to confirm the bot is alive
-	bot.Handle(tele.OnText, func(c tele.Context) error { return c.Reply("I'm alive!") })
+	bot.Handle(tele.OnText, func(c tele.Context) error {
+		if c.Chat().Type != tele.ChatPrivate {
+			return nil
+		}
+
+		return c.Reply("I'm alive!")
+	})
 
 	// start the bot in a separate goroutine, and stop it when the context is canceled
 	go func() {

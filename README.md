@@ -27,14 +27,26 @@ counter; when the bot shuts down gracefully, it marks the message as offline.
 
 ### Get your chat ID and topic (thread) ID
 
-The easiest way - forward any message from the target topic to [@userinfobot](https://t.me/userinfobot) or use the
-Telegram Web - the URL contains both IDs in the form `#-100XXXXXXXXXX/THREAD_ID`.
+The easiest way - forward any message from the target topic to [@idbot](https://t.me/idbot). Simply post a message with
+the text like `test` in the topic, forward it to `@idbot`, and it will reply with the chat ID and thread ID:
+
+```text
+🔎 TELEGRAM GROUP CHECK
+
+👥 Group: <your group name>
+🆔 -1001234567890 | 13 digits
+```
+
+The `-1001234567890` is the **chat ID**.
 
 > [!NOTE]
 > Chat IDs for supergroups are negative and start with `-100`.
 
-Also, you may use `curl https://api.telegram.org/bot<BOT_TOKEN>/getUpdates | jq` to get the chat ID and thread ID from
-the JSON output.
+To get the **thread ID**, click on the topic title, and you will see the "Invite link" in the format
+`https://t.me/<your_group_name>/<thread_id>`. The `<thread_id>` is the topic ID.
+
+> Alternatively, you may post any message in the topic and use
+> `curl https://api.telegram.org/bot<BOT_TOKEN>/getUpdates | jq` to find all the relevant IDs in the JSON output.
 
 ### First run - let the bot create its message
 
@@ -187,3 +199,20 @@ logrotate -f /etc/logrotate.d/bot # force an immediate rotation
 > [!NOTE]
 > On some Ubuntu installations `/var/log` is group-writable, which causes logrotate to fail with
 > `error: skipping "/var/log/bot.log" because parent directory has insecure permissions`. Fix: `chmod 755 /var/log`
+
+### Updating the bot
+
+```bash
+# download the new binary (e.g. via curl + tar) and place it in `/home/telegram-bot/bot-new`.
+# all the commands below are run as root
+
+# stop the running service, replace the binary, and start it back
+systemctl stop bot.service
+mv /home/telegram-bot/bot-new /home/telegram-bot/bot
+chown telegram-bot:telegram-bot /home/telegram-bot/bot
+chmod 755 /home/telegram-bot/bot
+systemctl start bot.service
+
+# check the logs to confirm it came back up cleanly
+tail -f /var/log/bot.log
+```
