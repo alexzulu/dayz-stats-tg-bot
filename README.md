@@ -212,6 +212,7 @@ mv /home/telegram-bot/bot-new /home/telegram-bot/bot
 chown telegram-bot:telegram-bot /home/telegram-bot/bot
 chmod 755 /home/telegram-bot/bot
 systemctl start bot.service
+systemctl status bot.service
 
 # check the logs to confirm it came back up cleanly
 tail -f /var/log/bot.log
