@@ -11,9 +11,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/woozymasta/a2s/pkg/a2s"
+	"github.com/woozymasta/bercon-cli/pkg/bercon"
 	tele "gopkg.in/telebot.v4"
 
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/dayz_server"
@@ -24,7 +26,9 @@ import (
 type App struct {
 	flags struct {
 		updInterval time.Duration
-		srvAddr     string
+		a2cAddr     string
+		rconAddr    string
+		rconPwd     string
 		tgBotTkn    string
 		tgChatID    int64
 		tgThreadID  int
@@ -47,10 +51,24 @@ func NewApp(name string) *App {
 	)
 
 	app.flagSet.StringVar(
-		&app.flags.srvAddr,
-		"server-address",
-		os.Getenv("SERVER_ADDRESS"),
-		"<ip-or-domain>:<port> of the DayZ server to query [$SERVER_ADDRESS]",
+		&app.flags.a2cAddr,
+		"a2c-address",
+		os.Getenv("A2C_ADDRESS"),
+		"<ip-or-domain>:<port> of the DayZ server's A2C interface [$A2C_ADDRESS]",
+	)
+
+	app.flagSet.StringVar(
+		&app.flags.rconAddr,
+		"rcon-address",
+		os.Getenv("RCON_ADDRESS"),
+		"<ip-or-domain>:<port> of the DayZ server's BattlEye RCon [$RCON_ADDRESS]",
+	)
+
+	app.flagSet.StringVar(
+		&app.flags.rconPwd,
+		"rcon-password",
+		os.Getenv("RCON_PASSWORD"),
+		"Password for the DayZ server's BattlEye RCon [$RCON_PASSWORD]",
 	)
 
 	app.flagSet.StringVar(
@@ -94,57 +112,83 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	opt := opts{
+		TGChatID:    a.flags.tgChatID,
+		TGThreadID:  a.flags.tgThreadID,
+		TGMessageID: a.flags.tgMessageID,
+	}
+
+	// validate the update interval
 	if a.flags.updInterval <= time.Second {
 		return fmt.Errorf("update interval must be greater than 1 second: %s", a.flags.updInterval)
 	}
 
-	host, port, srvAddrErr := net.SplitHostPort(a.flags.srvAddr)
-	if srvAddrErr != nil {
-		return fmt.Errorf("invalid server address: %w", srvAddrErr)
+	opt.UpdateInterval = a.flags.updInterval
+
+	// ensure that at least one of the A2C or RCon addresses is provided
+	if a.flags.a2cAddr == "" && a.flags.rconAddr == "" {
+		return errors.New("at least one of A2C or RCon address must be provided")
 	}
 
-	if host == "" {
-		return fmt.Errorf("server host is empty: %s", a.flags.srvAddr)
+	// validate the A2C address if provided
+	if a.flags.a2cAddr != "" {
+		host, port, sErr := net.SplitHostPort(a.flags.a2cAddr)
+		if sErr != nil {
+			return fmt.Errorf("invalid A2C server address: %w", sErr)
+		}
+
+		if host == "" {
+			return fmt.Errorf("server host is empty: %s", a.flags.a2cAddr)
+		}
+
+		portNum, pErr := strconv.ParseUint(port, 10, 16)
+		if pErr != nil || portNum <= 0 || portNum > math.MaxUint16 {
+			return fmt.Errorf("invalid server port: %s", port)
+		}
+
+		opt.A2CHost, opt.A2CPort = host, uint16(portNum)
 	}
 
-	portNum, portParseErr := strconv.ParseUint(port, 10, 16)
-	if portParseErr != nil || portNum <= 0 || portNum > math.MaxUint16 {
-		return fmt.Errorf("invalid server port: %s", port)
+	// validate the RCon address if provided
+	if a.flags.rconAddr != "" {
+		if _, _, err := net.SplitHostPort(a.flags.rconAddr); err != nil {
+			return fmt.Errorf("invalid RCon server address: %w", err)
+		}
+
+		opt.RCONAddr, opt.RCONPassword = a.flags.rconAddr, a.flags.rconPwd
 	}
 
+	// validate the Telegram bot token
 	if len(a.flags.tgBotTkn) != 46 { //nolint:mnd
 		return fmt.Errorf("invalid Telegram bot token length: %s", a.flags.tgBotTkn)
 	}
 
+	opt.TGBotToken = a.flags.tgBotTkn
+
+	// create a structured logger
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 
-	log.Debug("Starting DayZ Telegram stats bot")
-
-	return a.run(ctx, opts{
-		ServerHost:     host,
-		ServerPort:     uint16(portNum),
-		UpdateInterval: a.flags.updInterval,
-		TGBotToken:     a.flags.tgBotTkn,
-		TGChatID:       a.flags.tgChatID,
-		TGThreadID:     a.flags.tgThreadID,
-		TGMessageID:    a.flags.tgMessageID,
-	}, log)
+	return a.run(ctx, opt, log)
 }
 
 type opts struct {
-	ServerHost     string
-	ServerPort     uint16
+	A2CHost        string
+	A2CPort        uint16
 	UpdateInterval time.Duration
+	RCONAddr       string
+	RCONPassword   string
 	TGBotToken     string
 	TGChatID       int64
 	TGThreadID     int
 	TGMessageID    int
 }
 
-func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nolint:funlen
-	// create a new Telegram bot instance
+func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nolint:gocognit,funlen
+	log.Debug("Starting DayZ Telegram stats bot")
+
+	// create a new Telegram bot instance (retry is required because sometimes Telegram API is unavailable)
 	bot, botErr := retry.Do(
 		ctx,
 		func() (*tele.Bot, error) {
@@ -176,9 +220,10 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 		return c.Reply("I'm alive!")
 	})
 
-	// start the bot in a separate goroutine, and stop it when the context is canceled
+	// start the bot in a separate goroutine, and stop it when the context is canceled (this required for handling
+	// incoming messages)
 	go func() {
-		go func() { <-ctx.Done(); bot.Stop() }()
+		go func() { <-ctx.Done(); bot.Stop() }() // stop the bot when the context is canceled
 
 		bot.Start()
 	}()
@@ -200,6 +245,7 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 		opt.TGMessageID = msgID // update the message ID for future edits
 	}
 
+	// on exit, update the message to indicate that the bot is offline
 	defer func() {
 		if _, err := bot.Edit(
 			&tele.Message{ID: opt.TGMessageID, Chat: &tele.Chat{ID: opt.TGChatID}},
@@ -209,6 +255,24 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 			log.Error("Failed to update message to indicate bot offline", slog.Any("error", err))
 		}
 	}()
+
+	// create both the A2S and RCon clients concurrently
+	ac, rc, cErr := a.createClients(ctx, opt, log)
+	defer func() { // ensure clients are closed after use
+		if ac != nil {
+			_ = ac.Close()
+		}
+
+		if rc != nil {
+			_ = rc.Close()
+		}
+	}()
+	if ac == nil && rc == nil {
+		return errors.New("failed to create both A2S and RCon clients")
+	}
+	if cErr != nil {
+		log.Warn("Failed to create some clients", slog.Any("error", cErr))
+	}
 
 	var (
 		startedAt        = time.Now()
@@ -234,22 +298,10 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 			func() { // use IIFE to ensure timer reset happens even if an error occurs
 				defer timer.Reset(opt.UpdateInterval) // reset the timer for the next update
 
+				// request the server info
 				info, infoErr := retry.Do(
 					ctx,
-					func() (*dayz_server.ServerInfo, error) {
-						c, cErr := a2s.New(opt.ServerHost, int(opt.ServerPort))
-						if cErr != nil {
-							return nil, fmt.Errorf("creating A2S client: %w", cErr)
-						}
-						defer func() { _ = c.Close() }()
-
-						log.Debug("Connected to DayZ server, requesting server info",
-							slog.String("host", opt.ServerHost),
-							slog.Uint64("port", uint64(opt.ServerPort)),
-						)
-
-						return dayz_server.GetServerInfo(c)
-					},
+					func() (*dayz_server.ServerInfo, error) { return dayz_server.GetServerInfo(ac, rc) },
 					retry.Attempts(5), //nolint:mnd
 					retry.OnError(func(err error, attempt int) {
 						log.Warn("Failed to get server info, retrying",
@@ -287,6 +339,60 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 			}()
 		}
 	}
+}
+
+// createClients concurrently creates and connects both the A2S and RCon clients based on the provided options.
+// It MAY return non-nil error together with one of the clients if the other client failed to connect.
+//
+// The caller is responsible for closing the returned clients.
+func (a *App) createClients(ctx context.Context, opt opts, log *slog.Logger) (*a2s.Client, *bercon.Connection, error) {
+	var (
+		wg sync.WaitGroup
+
+		ac    *a2s.Client
+		acErr error
+
+		rc    *bercon.Connection
+		rcErr error
+	)
+
+	if opt.A2CHost != "" && opt.A2CPort != 0 {
+		wg.Go(func() {
+			ac, acErr = retry.Do(
+				ctx,
+				func() (*a2s.Client, error) { return a2s.New(opt.A2CHost, int(opt.A2CPort)) },
+				retry.Attempts(120), //nolint:mnd
+				retry.Interval(500*time.Millisecond),
+				retry.OnError(func(err error, attempt int) {
+					log.Warn("Failed to connect to A2S server, retrying",
+						slog.Any("error", err),
+						slog.Int("attempt", attempt),
+					)
+				}),
+			)
+		})
+	}
+
+	if opt.RCONAddr != "" {
+		wg.Go(func() {
+			rc, rcErr = retry.Do(
+				ctx,
+				func() (*bercon.Connection, error) { return bercon.Open(opt.RCONAddr, opt.RCONPassword) },
+				retry.Attempts(120), //nolint:mnd
+				retry.Interval(500*time.Millisecond),
+				retry.OnError(func(err error, attempt int) {
+					log.Warn("Failed to connect to RCon server, retrying",
+						slog.Any("error", err),
+						slog.Int("attempt", attempt),
+					)
+				}),
+			)
+		})
+	}
+
+	wg.Wait()
+
+	return ac, rc, errors.Join(acErr, rcErr)
 }
 
 // sendInitMessage sends an initial message to the specified Telegram chat and thread, indicating that the bot is
@@ -352,6 +458,19 @@ func (*App) updateMessageInfo(bot *tele.Bot, opt opts, info dayz_server.ServerIn
 	_, _ = fmt.Fprintf(&text, "*%d*\\.%d", pingMicro/1000, pingMicro%100) //nolint:mnd
 	text.WriteString(" мс")
 
+	if len(info.PlayerNames) > 0 {
+		text.WriteRune('\n')
+		text.WriteString("👤 *Хомячат*: ")
+
+		for i, name := range info.PlayerNames {
+			if i > 0 {
+				text.WriteString(", ")
+			}
+
+			text.WriteString(escapeForMarkdownV2(name))
+		}
+	}
+
 	if _, err := bot.Edit(
 		&tele.Message{ID: opt.TGMessageID, Chat: &tele.Chat{ID: opt.TGChatID}},
 		text.String(),
@@ -387,4 +506,26 @@ func (*App) updateMessageServerDown(bot *tele.Bot, opt opts, downtime time.Durat
 	}
 
 	return nil
+}
+
+// escapeForMarkdownV2 escapes all MarkdownV2 special characters in s so the resulting string is safe to send as
+// plain text with telebot.ModeMarkdownV2.
+// It does NOT preserve any Markdown formatting that might already be in s - use this only for raw/untrusted text,
+// not for strings you've hand-crafted with *bold*, _italic_, etc.
+func escapeForMarkdownV2(s string) string {
+	// order doesn't matter here since we do a single pass, but backslash must be in the set (it's the escape char itself)
+	const specialChars = "_*[]()~`>#+-=|{}.!\\"
+
+	var b strings.Builder
+	b.Grow(len(s) + len(s)/4) // small headroom for escapes
+
+	for _, r := range s {
+		if strings.ContainsRune(specialChars, r) {
+			b.WriteByte('\\')
+		}
+
+		b.WriteRune(r)
+	}
+
+	return b.String()
 }
