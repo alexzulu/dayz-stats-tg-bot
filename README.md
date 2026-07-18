@@ -1,8 +1,10 @@
 # DayZ Stats Telegram Bot
 
 A Telegram bot that monitors a DayZ server and keeps a single pinned message updated with live stats: player count,
-in-game time (with day/night indicator), ping, etc. When the server goes down, the message switches to a downtime
-counter; when the bot shuts down gracefully, it marks the message as offline.
+player names, in-game time (with day/night indicator), ping, etc. When the server goes down, the message switches to
+a downtime counter; when the bot shuts down gracefully, it marks the message as offline.
+
+Player names are fetched via BattlEye RCon and are optional - the bot works without RCon, just without the name list.
 
 ## Requirements
 
@@ -58,7 +60,7 @@ On the very first launch, **do not** pass `--tg-message-id`. The bot will:
 
 ```
 ./bot \
-  --server-address "your.dayz.server:2302" \
+  --a2c-address "your.dayz.server:2302" \
   --tg-bot-token "123456789:ABCdef..." \
   --tg-chat-id -1001234567890 \
   --tg-thread-id 42
@@ -82,7 +84,20 @@ times as needed - it will always update the same message.
 
 ```
 ./bot \
-  --server-address "your.dayz.server:2302" \
+  --a2c-address "your.dayz.server:2302" \
+  --tg-bot-token "123456789:ABCdef..." \
+  --tg-chat-id -1001234567890 \
+  --tg-thread-id 42 \
+  --tg-message-id 999
+```
+
+To also show player names, add `--rcon-address` and `--rcon-password`:
+
+```
+./bot \
+  --a2c-address "your.dayz.server:2302" \
+  --rcon-address "your.dayz.server:2306" \
+  --rcon-password "your-rcon-password" \
   --tg-bot-token "123456789:ABCdef..." \
   --tg-chat-id -1001234567890 \
   --tg-thread-id 42 \
@@ -98,14 +113,18 @@ message ID from the log, then restart with it.
 
 All flags can also be set via environment variables where noted.
 
-| Flag                | Env variable     | Default | Description                                                                       |
-|---------------------|------------------|---------|-----------------------------------------------------------------------------------|
-| `--server-address`  | `SERVER_ADDRESS` | -       | `host:port` of the DayZ server (A2S query port, usually game port + 0 or `27016`) |
-| `--tg-bot-token`    | `TG_BOT_TOKEN`   | -       | Telegram bot auth token from @BotFather                                           |
-| `--tg-chat-id`      | -                | -       | Telegram chat (group) ID                                                          |
-| `--tg-thread-id`    | -                | `0`     | Topic (thread) ID inside the group                                                |
-| `--tg-message-id`   | -                | `0`     | Message ID to edit (omit on first run to create a new one)                        |
-| `--update-interval` | -                | `10s`   | How often to poll the server. Must be greater than `1s`                           |
+At least one of `--a2c-address` or `--rcon-address` must be provided.
+
+| Flag                | Env variable    | Default | Description                                                                         |
+|---------------------|-----------------|---------|-------------------------------------------------------------------------------------|
+| `--a2c-address`     | `A2C_ADDRESS`   | -       | `host:port` of the DayZ server's A2C query interface (usually game port or `27016`) |
+| `--rcon-address`    | `RCON_ADDRESS`  | -       | `host:port` of the DayZ server's BattlEye RCon (optional, enables player names)     |
+| `--rcon-password`   | `RCON_PASSWORD` | -       | Password for the BattlEye RCon (required when `--rcon-address` is set)              |
+| `--tg-bot-token`    | `TG_BOT_TOKEN`  | -       | Telegram bot auth token from @BotFather                                             |
+| `--tg-chat-id`      | -               | -       | Telegram chat (group) ID                                                            |
+| `--tg-thread-id`    | -               | `0`     | Topic (thread) ID inside the group                                                  |
+| `--tg-message-id`   | -               | `0`     | Message ID to edit (omit on first run to create a new one)                          |
+| `--update-interval` | -               | `10s`   | How often to poll the server. Must be greater than `1s`                             |
 
 ## Building
 
@@ -149,7 +168,8 @@ User=telegram-bot
 Group=telegram-bot
 WorkingDirectory=/home/telegram-bot
 Environment="TG_BOT_TOKEN=1234567890:XXXXXXXXXXXXXXXXX"
-ExecStart=/home/telegram-bot/bot --server-address 123.123.123.123:27016 --tg-thread-id 11 --tg-chat-id -1002222222222 --tg-message-id 33
+Environment="RCON_PASSWORD=your-rcon-password"
+ExecStart=/home/telegram-bot/bot --a2c-address 123.123.123.123:27016 --rcon-address 123.123.123.123:2306 --tg-thread-id 11 --tg-chat-id -1002222222222 --tg-message-id 33
 
 Restart=on-failure
 RestartSec=5
