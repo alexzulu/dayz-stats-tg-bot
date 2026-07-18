@@ -185,7 +185,7 @@ type opts struct {
 	TGMessageID    int
 }
 
-func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nolint:gocognit,funlen
+func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nolint:funlen
 	log.Debug("Starting DayZ Telegram stats bot")
 
 	// create a new Telegram bot instance (retry is required because sometimes Telegram API is unavailable)
@@ -267,10 +267,10 @@ func (a *App) run(ctx context.Context, opt opts, log *slog.Logger) error { //nol
 			_ = rc.Close()
 		}
 	}()
-	if ac == nil && rc == nil {
+	if ac == nil && rc == nil { //nolint:wsl_v5
 		return errors.New("failed to create both A2S and RCon clients")
 	}
-	if cErr != nil {
+	if cErr != nil { //nolint:wsl_v5
 		log.Warn("Failed to create some clients", slog.Any("error", cErr))
 	}
 
@@ -361,8 +361,8 @@ func (a *App) createClients(ctx context.Context, opt opts, log *slog.Logger) (*a
 			ac, acErr = retry.Do(
 				ctx,
 				func() (*a2s.Client, error) { return a2s.New(opt.A2CHost, int(opt.A2CPort)) },
-				retry.Attempts(120), //nolint:mnd
-				retry.Interval(500*time.Millisecond),
+				retry.Attempts(120),                  //nolint:mnd
+				retry.Interval(500*time.Millisecond), //nolint:mnd
 				retry.OnError(func(err error, attempt int) {
 					log.Warn("Failed to connect to A2S server, retrying",
 						slog.Any("error", err),
@@ -378,8 +378,8 @@ func (a *App) createClients(ctx context.Context, opt opts, log *slog.Logger) (*a
 			rc, rcErr = retry.Do(
 				ctx,
 				func() (*bercon.Connection, error) { return bercon.Open(opt.RCONAddr, opt.RCONPassword) },
-				retry.Attempts(120), //nolint:mnd
-				retry.Interval(500*time.Millisecond),
+				retry.Attempts(120),                  //nolint:mnd
+				retry.Interval(500*time.Millisecond), //nolint:mnd
 				retry.OnError(func(err error, attempt int) {
 					log.Warn("Failed to connect to RCon server, retrying",
 						slog.Any("error", err),
