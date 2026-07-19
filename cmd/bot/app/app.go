@@ -365,7 +365,9 @@ func (a *App) run(ctx context.Context, log *slog.Logger) error { //nolint:funlen
 								}
 
 								_ = rc.Close() // close the old connection
+
 								newRC.StartKeepAlive()
+
 								rc = newRC // update the connection to the new one
 
 								// retry getting info with the new connection
