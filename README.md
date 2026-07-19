@@ -69,7 +69,7 @@ On the very first launch, **do not** pass `--tg-message-id`. The bot will:
 Look for the message ID in the log output:
 
 ```
-msg=Sent initial message message_id=999
+time=... level=INFO msg="The initial message is sent to Telegram chat" message_id=999
 ```
 
 Stop the bot (`Ctrl+C`) and note the `message_id`.
@@ -113,18 +113,18 @@ message ID from the log, then restart with it.
 
 All flags can also be set via environment variables where noted.
 
-At least one of `--a2c-address` or `--rcon-address` must be provided.
+`--a2c-address` is required. `--rcon-address` is optional (enables player names).
 
-| Flag                | Env variable    | Default | Description                                                                         |
-|---------------------|-----------------|---------|-------------------------------------------------------------------------------------|
-| `--a2c-address`     | `A2C_ADDRESS`   | -       | `host:port` of the DayZ server's A2C query interface (usually game port or `27016`) |
-| `--rcon-address`    | `RCON_ADDRESS`  | -       | `host:port` of the DayZ server's BattlEye RCon (optional, enables player names)     |
-| `--rcon-password`   | `RCON_PASSWORD` | -       | Password for the BattlEye RCon (required when `--rcon-address` is set)              |
-| `--tg-bot-token`    | `TG_BOT_TOKEN`  | -       | Telegram bot auth token from @BotFather                                             |
-| `--tg-chat-id`      | -               | -       | Telegram chat (group) ID                                                            |
-| `--tg-thread-id`    | -               | `0`     | Topic (thread) ID inside the group                                                  |
-| `--tg-message-id`   | -               | `0`     | Message ID to edit (omit on first run to create a new one)                          |
-| `--update-interval` | -               | `10s`   | How often to poll the server. Must be greater than `1s`                             |
+| Flag                | Env variable    | Default | Description                                                                                       |
+|---------------------|-----------------|---------|---------------------------------------------------------------------------------------------------|
+| `--a2c-address`     | `A2C_ADDRESS`   | -       | `host:port` of the DayZ server's A2C query interface (**required**, usually game port or `27016`) |
+| `--rcon-address`    | `RCON_ADDRESS`  | -       | `host:port` of the DayZ server's BattlEye RCon (optional, enables player names)                   |
+| `--rcon-password`   | `RCON_PASSWORD` | -       | Password for the BattlEye RCon                                                                    |
+| `--tg-bot-token`    | `TG_BOT_TOKEN`  | -       | Telegram bot auth token from `@BotFather`                                                         |
+| `--tg-chat-id`      | -               | -       | Telegram chat (group) ID                                                                          |
+| `--tg-thread-id`    | -               | `0`     | Topic (thread) ID inside the group                                                                |
+| `--tg-message-id`   | -               | `0`     | Message ID to edit (omit on first run to create a new one)                                        |
+| `--update-interval` | -               | `10s`   | How often to poll the server. Must be greater than `1s`                                           |
 
 ## Building
 
