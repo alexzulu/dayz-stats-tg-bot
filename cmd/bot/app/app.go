@@ -299,7 +299,7 @@ func (a *App) run(ctx context.Context, log *slog.Logger) error { //nolint:funlen
 					acErr error // used to store both error types for A2C - connection and info retrieval
 				)
 
-				const attempts, interval = 15, 50 * time.Millisecond
+				const attempts, interval = 5, 100 * time.Millisecond
 
 				// request server info via A2C
 				wg.Add(1)
@@ -324,6 +324,7 @@ func (a *App) run(ctx context.Context, log *slog.Logger) error { //nolint:funlen
 
 						return
 					}
+					defer func() { _ = ac.Close() }()
 
 					if _, acErr = retry.Do(ctx,
 						func() (struct{}, error) { return struct{}{}, info.GetFromA2S(ac) },

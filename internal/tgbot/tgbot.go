@@ -202,6 +202,10 @@ func (t *TGBot) SetMessageOffline(chatID int64, threadID, messageID int) error {
 		"||🛑 Bot offline||",
 		&tele.SendOptions{ThreadID: threadID, ParseMode: tele.ModeMarkdownV2},
 	); err != nil {
+		if errors.Is(err, tele.ErrSameMessageContent) {
+			return nil
+		}
+
 		return err
 	}
 
@@ -232,6 +236,10 @@ func (t *TGBot) SetMessagesServerDown(chatID int64, threadID, messageID int, dow
 		text.String(),
 		&tele.SendOptions{ThreadID: threadID, ParseMode: tele.ModeMarkdownV2},
 	); err != nil {
+		if errors.Is(err, tele.ErrSameMessageContent) {
+			return nil
+		}
+
 		return err
 	}
 
