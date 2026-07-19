@@ -247,7 +247,11 @@ func (a *App) run(ctx context.Context, log *slog.Logger) error { //nolint:funlen
 			)
 			if rcErr != nil {
 				log.Warn("Failed to connect to RCon server", slog.Any("error", rcErr)) // RCon connection is optional
+
+				return
 			}
+
+			rc.StartKeepAlive() // prevent BattlEye from dropping idle sessions
 		})
 	}
 
@@ -348,8 +352,26 @@ func (a *App) run(ctx context.Context, log *slog.Logger) error { //nolint:funlen
 						defer wg.Done()
 
 						if _, err := retry.Do(ctx,
-							func() (struct{}, error) { return struct{}{}, info.GetFromRCon(rc) },
-							retry.Attempts(attempts),
+							func() (struct{}, error) {
+								infoErr := info.GetFromRCon(rc)
+								if infoErr == nil {
+									return struct{}{}, nil
+								}
+
+								// since we've got an error, try to reconnect and retry immediately
+								newRC, reconnErr := bercon.Open(a.opts.RCONAddr, a.opts.RCONPassword)
+								if reconnErr != nil {
+									return struct{}{}, errors.Join(infoErr, reconnErr) // failed to reconnect
+								}
+
+								_ = rc.Close() // close the old connection
+								newRC.StartKeepAlive()
+								rc = newRC // update the connection to the new one
+
+								// retry getting info with the new connection
+								return struct{}{}, info.GetFromRCon(rc)
+							},
+							retry.Attempts(2), //nolint:mnd // RCon is optional - fail fast, reconnect on error
 							retry.Interval(interval),
 							retry.OnError(func(err error, attempt int) {
 								log.Warn("Failed to get server info via RCon, retrying",
