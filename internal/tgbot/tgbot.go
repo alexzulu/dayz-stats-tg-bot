@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -95,7 +97,6 @@ func (t *TGBot) SendInitialMessage(chatID int64, threadID int) (int, error) {
 			ThreadID:            threadID,
 			ParseMode:           tele.ModeMarkdown,
 			DisableNotification: true,
-			Protected:           true,
 		},
 	)
 	if msgErr != nil {
@@ -163,17 +164,19 @@ func (t *TGBot) SetMessagesServerInfo(chatID int64, threadID, messageID int, inf
 
 	// append player names (if available)
 	if len(info.PlayerNames) > 0 {
-		text.WriteString("👤 *Хомячат*: ")
+		text.WriteString("\n> *Хомячат*:\n")
 
-		for i, name := range info.PlayerNames {
-			if i > 0 {
-				text.WriteString(", ")
-			}
+		names := make([]string, len(info.PlayerNames))
+		copy(names, info.PlayerNames)
+		sort.Strings(names)
 
+		for _, name := range names {
+			text.WriteString("> ‣ ")
+			text.WriteString(emojiForUsername(name))
+			text.WriteString(" __")
 			text.WriteString(escapeForMarkdownV2(name))
+			text.WriteString("__\n")
 		}
-
-		text.WriteRune('\n')
 	}
 
 	if _, err := t.client.Edit(
@@ -266,4 +269,20 @@ func escapeForMarkdownV2(s string) string {
 	}
 
 	return b.String()
+}
+
+var userEmojis = [...]string{ //nolint:gochecknoglobals
+	"🪖", "🎒", "🔪", "🗡️", "🪓", "🔫", "💣", "🛡️", "⚔️", "🏕️", "🥫", "🍖", "🥩", "🍄", "🩹",
+	"💉", "💊", "🩸", "☢️", "☣️", "💀", "👀", "🐺", "🦌", "🐻", "🐗", "🦊", "🐟", "🔦", "📻",
+	"🧭", "🔧", "📦", "🎯", "🍺", "🍻",
+}
+
+// emojiForUsername deterministically returns an emoji for a given username.
+func emojiForUsername(username string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(username))
+
+	idx := h.Sum32() % uint32(len(userEmojis))
+
+	return userEmojis[idx]
 }
