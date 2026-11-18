@@ -2,6 +2,8 @@ package bot
 
 import (
 	"errors"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,15 +65,27 @@ func (t *Telegram) botWithLock() (*telebot.Bot, error) {
 	return t.bot()
 }
 
-// OnPrivateMessage registers the handler for text messages from private chats, ignoring group and channel messages;
-// It connects the bot on first call and restarts the polling loop so the handler takes effect.
-func (t *Telegram) OnPrivateMessage(h telebot.HandlerFunc, m ...telebot.MiddlewareFunc) error {
+// Command represents a Telegram bot command with its text, description, handler, and optional middleware.
+type Command struct {
+	Text        string
+	Description string
+	Handler     telebot.HandlerFunc
+	Middleware  []telebot.MiddlewareFunc
+}
+
+// RegisterPrivateCommands wires each command's handler and advertises the set, so clients show them under the
+// "Menu" button.
+//
+// Commands with a nil handler are skipped, handlers fire only in private chats.
+//
+// The variadic m is applied to every command as outermost middleware (before per-command Middleware).
+func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot.MiddlewareFunc) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	bot, err := t.bot()
-	if err != nil {
-		return err
+	bot, bErr := t.bot()
+	if bErr != nil {
+		return bErr
 	}
 
 	if t.started {
@@ -80,13 +94,42 @@ func (t *Telegram) OnPrivateMessage(h telebot.HandlerFunc, m ...telebot.Middlewa
 		t.started = false
 	}
 
-	bot.Handle(telebot.OnText, func(c telebot.Context) error {
-		if chat := c.Chat(); chat != nil && chat.Type != telebot.ChatPrivate {
-			return nil
+	cmds := make([]telebot.Command, 0, len(commands))
+	for _, cmd := range commands {
+		if cmd.Handler == nil {
+			continue
 		}
 
-		return h(c)
-	}, m...)
+		trigger := strings.TrimSpace(strings.TrimLeft(cmd.Text, "/ ")) // bare text, no leading slash
+		if trigger == "" {
+			continue
+		}
+
+		cmds = append(cmds, telebot.Command{
+			Text:        trigger,
+			Description: cmd.Description,
+		})
+
+		bot.Handle(
+			"/"+trigger, // telebot routes on "/cmd"; text is bare, so prepend slash
+			func(c telebot.Context) error {
+				if chat := c.Chat(); chat != nil && chat.Type != telebot.ChatPrivate {
+					return nil
+				}
+
+				return cmd.Handler(c)
+			},
+			append(slices.Clone(globMw), cmd.Middleware...)...,
+		)
+	}
+
+	if err := bot.DeleteCommands(); err != nil {
+		return err
+	}
+
+	if err := bot.SetCommands(cmds, telebot.CommandScope{Type: telebot.CommandScopeAllPrivateChats}); err != nil {
+		return err
+	}
 
 	if !t.started {
 		go bot.Start()
@@ -95,6 +138,19 @@ func (t *Telegram) OnPrivateMessage(h telebot.HandlerFunc, m ...telebot.Middlewa
 	}
 
 	return nil
+}
+
+// Ping verifies Telegram API reachability and bot token.
+func (t *Telegram) Ping() error {
+	bot, err := t.botWithLock()
+	if err != nil {
+		return err
+	}
+
+	// Raw surfaces network errors (wrapError) and API errors like 401 on a bad token (extractOk)
+	_, err = bot.Raw("getMe", nil)
+
+	return err
 }
 
 // Close stops the polling loop and releases the bot. Safe to call more than once.
