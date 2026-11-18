@@ -2,6 +2,17 @@
 /.idea
 /.vscode
 
+## AI shit
+/.copilot
+/.github/copilot*
+/.cursor
+/.claude
+/.windsurf
+/.aider*
+/.gemini
+CLAUDE.md
+AGENTS.md
+
 ## Binaries
 /app
 /bot
