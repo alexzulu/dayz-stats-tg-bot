@@ -2,6 +2,9 @@
 /.idea
 /.vscode
 
+## Temporary tests
+/**/*temp_test.go
+
 ## AI shit
 /.copilot
 /.github/copilot*
