@@ -1,4 +1,4 @@
-package game_map
+package gamemap
 
 import (
 	"image"
@@ -9,7 +9,7 @@ import (
 
 	xdraw "golang.org/x/image/draw"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
 )
 
 // mapCanvas is the rendered crop of a map plus the knowledge of how in-game coordinates land on it.
@@ -47,7 +47,7 @@ type mapCanvas struct {
 //
 // downscale (>=1; 0 is treated as 1, and it may be fractional-equivalent like 6) shrinks the output: each tile is
 // scaled down as it is blitted, so the full-resolution crop is never materialized, and scale is reduced to match so
-// all the downstream projection math keeps working. Neighbouring tiles are placed on abutting rounded rectangles,
+// all the downstream projection math keeps working. Neighboring tiles are placed on abutting rounded rectangles,
 // so there are no gaps regardless of the factor. downscale == 1 is an exact 1:1 blit (no resampling).
 func newMapCanvas(m maps.Map, locX, locY float64, marginXpx, marginYpx, downscale int) (*mapCanvas, error) {
 	if downscale < 1 {
@@ -59,7 +59,7 @@ func newMapCanvas(m maps.Map, locX, locY float64, marginXpx, marginYpx, downscal
 	factor := 1.0 / float64(downscale) // output pixels per full-map pixel
 
 	// viewport is the margin on each side, clamped so it never exceeds the map
-	vw, vh := min(2*marginXpx, mapPX), min(2*marginYpx, mapPX)
+	vw, vh := min(2*marginXpx, mapPX), min(2*marginYpx, mapPX) //nolint:mnd
 
 	// center in whole-map pixels (Y flipped - the top pixel row is the highest game Y), then slide the window fully
 	// inside the map so we never address tiles outside the grid
@@ -71,7 +71,7 @@ func newMapCanvas(m maps.Map, locX, locY float64, marginXpx, marginYpx, downscal
 	img := image.NewRGBA(image.Rect(0, 0, int(math.Round(float64(vw)*factor)), int(math.Round(float64(vh)*factor))))
 
 	// blit every tile overlapping the crop, scaling it into its slot when downscale > 1. Rounding both edges of
-	// each tile's destination (rather than scaling a fixed tile size) keeps neighbouring tiles abutting with no gap.
+	// each tile's destination (rather than scaling a fixed tile size) keeps neighboring tiles abutting with no gap.
 	ts := m.TileSizePX()
 
 	var (

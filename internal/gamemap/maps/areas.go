@@ -19,11 +19,12 @@ type Area struct {
 //
 // Points exactly on an edge are reported inconsistently - acceptable given the ~1-2m contour tolerance.
 func (a Area) Contains(x, y float64) bool {
-	if len(a.Polygon) < 3 {
+	if len(a.Polygon) < 3 { //nolint:mnd
 		return false
 	}
 
 	in := false
+
 	for i, j := 0, len(a.Polygon)-1; i < len(a.Polygon); j, i = i, i+1 {
 		xi, yi := a.Polygon[i][0], a.Polygon[i][1]
 		xj, yj := a.Polygon[j][0], a.Polygon[j][1]
@@ -40,6 +41,7 @@ func (a Area) Contains(x, y float64) bool {
 // A point may fall into several areas (overlaps allowed); callers compare the result against name constants.
 func InAreas(areas []Area, x, y float64) []AreaName {
 	var names []AreaName
+
 	for i := range areas {
 		if areas[i].Contains(x, y) {
 			names = append(names, areas[i].Name)

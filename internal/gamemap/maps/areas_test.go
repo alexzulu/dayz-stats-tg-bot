@@ -3,7 +3,7 @@ package maps_test
 import (
 	"testing"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/testutil/assert"
 )
 

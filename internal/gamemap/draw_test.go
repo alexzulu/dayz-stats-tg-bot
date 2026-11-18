@@ -1,4 +1,4 @@
-package game_map_test
+package gamemap_test
 
 import (
 	"bytes"
@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"testing"
 
-	gamemap "github.com/alexzulu/dayz-stats-tg-bot/internal/map"
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps/chernarusplus"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps/chernarusplus"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/testutil/assert"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/testutil/random"
 )
@@ -169,8 +169,10 @@ func TestDemo(t *testing.T) {
 		assert.NoError(t, os.MkdirAll(dir, 0o755))
 
 		f, cErr := os.Create(filepath.Join(dir, name+".png"))
+
 		assert.NoError(t, cErr)
 		defer func() { assert.NoError(t, f.Close()) }()
+
 		assert.NoError(t, png.Encode(f, img))
 	}
 
@@ -178,7 +180,7 @@ func TestDemo(t *testing.T) {
 	points := func(m maps.Map, n int) []gamemap.Point {
 		ps := make([]gamemap.Point, n)
 		for i := range ps {
-			x, y := rand.Float64()*float64(m.MapSize()), rand.Float64()*float64(m.MapSize())
+			x, y := rand.Float64()*float64(m.MapSize()), rand.Float64()*float64(m.MapSize()) //nolint:gosec
 			ps[i] = gamemap.Point{
 				PosX:        x,
 				PosY:        y,
@@ -250,8 +252,8 @@ func BenchmarkDrawPoints(b *testing.B) {
 	points := make([]gamemap.Point, 30)
 	for i := range points {
 		points[i] = gamemap.Point{
-			PosX:     rand.Float64() * float64(m.MapSize()),
-			PosY:     rand.Float64() * float64(m.MapSize()),
+			PosX:     rand.Float64() * float64(m.MapSize()), //nolint:gosec
+			PosY:     rand.Float64() * float64(m.MapSize()), //nolint:gosec
 			TopLabel: "survivor_" + strconv.Itoa(i),
 		}
 	}

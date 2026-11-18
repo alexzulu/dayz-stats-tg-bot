@@ -1,4 +1,4 @@
-package game_map
+package gamemap
 
 // Each directive (re)builds one map - downloads its tiles into `maps/<name>/tiles/...` and generates
 // `maps/<name>/info.go`.
@@ -10,7 +10,7 @@ package game_map
 //     the generator), delete the map's `info.go` first.
 //go:generate go run generate/download_tiles.go -map-name chernarusplus -map-version "26.11.13" -info-version "1.30-1"  -out ./maps/chernarusplus -pkg-name chernarusplus
 
-// disabled for now:
+//nolint:lll // disabled for now:
 ///go:generate go run generate/download_tiles.go -map-name livonia       -map-version "1.27"     -info-version "1.30"    -out ./maps/livonia       -pkg-name livonia
 ///go:generate go run generate/download_tiles.go -map-name sakhal        -map-version "1.27"     -info-version "1.30"    -out ./maps/sakhal        -pkg-name sakhal
 ///go:generate go run generate/download_tiles.go -map-name nasdara       -map-version "26.11.09" -info-version "1.30-12" -out ./maps/nasdara       -pkg-name nasdara

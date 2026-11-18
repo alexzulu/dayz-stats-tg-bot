@@ -1,6 +1,6 @@
 package chernarusplus
 
-import "github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
+import "github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
 
 // Polygons below outline the map's most significant areas. All hand-crafted - contours traced by hand on
 // https://dayz.xam.nu/ as precisely as possible (military bases along the outer chain-link fence), with ~1-2m
@@ -17,13 +17,18 @@ import "github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
 // Rounded to 0.1 m.
 
 const (
+	// NWAFAreaName is the name of "Vybor Air Base".
 	NWAFAreaName maps.AreaName = "Vybor Air Base"
-	TMBAreaName  maps.AreaName = "Tisy Military Base"
-	KMBAreaName  maps.AreaName = "Kamensk Military Base"
+
+	// TMBAreaName is the name of "Tisy Military Base".
+	TMBAreaName maps.AreaName = "Tisy Military Base"
+
+	// KMBAreaName is the name of "Kamensk Military Base".
+	KMBAreaName maps.AreaName = "Kamensk Military Base"
 )
 
 // areas lists this map's named areas.
-var areas = []maps.Area{
+var areas = []maps.Area{ //nolint:gochecknoglobals
 	// NWAF is thw "Vybor Air Base" (North-West Airfield, NWAF, Выборская Авиабаза, СЗ).
 	// https://dayz.fandom.com/wiki/Vybor_Air_Base
 	{

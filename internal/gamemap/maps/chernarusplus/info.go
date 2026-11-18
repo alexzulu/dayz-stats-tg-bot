@@ -11,7 +11,7 @@ import (
 	"io/fs"
 	"strconv"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
 )
 
 // tiles holds the map's image tiles (x<col>/y<row>.jpg), embedded into the binary.

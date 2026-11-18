@@ -1,4 +1,4 @@
-package game_map
+package gamemap
 
 import (
 	"image"
@@ -15,7 +15,7 @@ import (
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/map/maps"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
 )
 
 // Point is a single annotated position on the map: a marker at (PosX, PosY) in game meters (PosX east,
@@ -96,15 +96,15 @@ func WithBottomLabelOffset(px int) DrawOption {
 // in-memory canvas ready to be encoded into any format.
 func DrawPoint(m maps.Map, p Point, opts ...DrawOption) (*image.RGBA, error) {
 	opt := drawOptions{
-		marginXpx:            640, //nolint:mnd
-		marginYpx:            360, //nolint:mnd
-		markerDiameterPx:     14,  //nolint:mnd
-		markerColor:          color.RGBA{R: 0xEE, G: 0x22, B: 0x22, A: 0xFF},
-		topFontPt:            18, //nolint:mnd
-		bottomFontPt:         14, //nolint:mnd
-		poiFontPt:            40, //nolint:mnd
-		topOffsetPx:          21, //nolint:mnd
-		bottomOffsetPx:       19, //nolint:mnd
+		marginXpx:            640,                                            //nolint:mnd
+		marginYpx:            360,                                            //nolint:mnd
+		markerDiameterPx:     14,                                             //nolint:mnd
+		markerColor:          color.RGBA{R: 0xEE, G: 0x22, B: 0x22, A: 0xFF}, //nolint:mnd
+		topFontPt:            18,                                             //nolint:mnd
+		bottomFontPt:         14,                                             //nolint:mnd
+		poiFontPt:            40,                                             //nolint:mnd
+		topOffsetPx:          21,                                             //nolint:mnd
+		bottomOffsetPx:       19,                                             //nolint:mnd
 		drawPointsOfInterest: false,
 	}
 	for _, o := range opts {
@@ -160,20 +160,20 @@ func DrawPoint(m maps.Map, p Point, opts ...DrawOption) (*image.RGBA, error) {
 }
 
 // overviewMapCache pools the pristine downscaled overview (map imagery only) so repeat DrawPoints calls skip
-// decoding every tile. sync.Pool lets the GC reclaim it under memory pressure.
-var overviewMapCache sync.Pool // holds *mapCanvas
+// decoding every tile. [sync.Pool] lets the GC reclaim it under memory pressure.
+var overviewMapCache sync.Pool //nolint:gochecknoglobals // holds *mapCanvas
 
 // DrawPoints renders the whole map, downscaled for a quick "where is everything" overview, and overlays every
 // point's marker with its top label above it and its bottom label below.
 func DrawPoints(m maps.Map, points []Point, opts ...DrawOption) (*image.RGBA, error) {
 	opt := drawOptions{
-		markerDiameterPx:     10, //nolint:mnd
-		markerColor:          color.RGBA{R: 0xEE, G: 0x22, B: 0x22, A: 0xFF},
-		topFontPt:            16, //nolint:mnd
-		bottomFontPt:         11, //nolint:mnd
-		poiFontPt:            24, //nolint:mnd
-		topOffsetPx:          16, //nolint:mnd
-		bottomOffsetPx:       16, //nolint:mnd
+		markerDiameterPx:     10,                                             //nolint:mnd
+		markerColor:          color.RGBA{R: 0xEE, G: 0x22, B: 0x22, A: 0xFF}, //nolint:mnd
+		topFontPt:            16,                                             //nolint:mnd
+		bottomFontPt:         11,                                             //nolint:mnd
+		poiFontPt:            24,                                             //nolint:mnd
+		topOffsetPx:          16,                                             //nolint:mnd
+		bottomOffsetPx:       16,                                             //nolint:mnd
 		drawPointsOfInterest: true,
 	}
 	for _, o := range opts {
@@ -184,11 +184,11 @@ func DrawPoints(m maps.Map, points []Point, opts ...DrawOption) (*image.RGBA, er
 	const downscale = 6
 
 	// reuse a pooled bare overview, or build it once (return it to the pool for the next call)
-	base, _ := overviewMapCache.Get().(*mapCanvas)
+	base, _ := overviewMapCache.Get().(*mapCanvas) //nolint:errcheck
 	if base == nil {
 		var err error
 		if base, err = newMapCanvas(m,
-			float64(m.MapSize())/2, float64(m.MapSize())/2, // center (clamp makes the exact value irrelevant)
+			float64(m.MapSize())/2, float64(m.MapSize())/2, //nolint:mnd // center (clamp makes the exact value irrelevant)
 			m.MapSizePX(), m.MapSizePX(), // margins >= map -> the whole map
 			downscale,
 		); err != nil {
@@ -260,13 +260,13 @@ type (
 )
 
 // withDrawOffsetPixels shifts the drawing away from its anchor point by (x, y) canvas pixels (see drawTextOptions).
-func withDrawOffsetPixels(x, y int) drawTextOption {
+func withDrawOffsetPixels(x, y int) drawTextOption { //nolint:unparam
 	return func(o *drawTextOptions) { o.xOffsetPx, o.yOffsetPx = x, y }
 }
 
 var (
-	goBoldFont    = mustFont(gobold.TTF)
-	goRegularFont = mustFont(goregular.TTF)
+	goBoldFont    = mustFont(gobold.TTF)    //nolint:gochecknoglobals
+	goRegularFont = mustFont(goregular.TTF) //nolint:gochecknoglobals
 )
 
 func mustFont(b []byte) *opentype.Font {
@@ -280,7 +280,7 @@ func mustFont(b []byte) *opentype.Font {
 
 // newFontFace creates a new font face.
 func newFontFace(f *opentype.Font, size float64) (font.Face, error) {
-	return opentype.NewFace(f, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull})
+	return opentype.NewFace(f, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull}) //nolint:mnd
 }
 
 // drawBackgroundText stamps a big label centered (both axes) on the in-game point (x east, y north, meters)
@@ -297,7 +297,7 @@ func drawBackgroundText(c *mapCanvas, x, y float64, text string, face font.Face,
 
 	metrics := face.Metrics()
 	boxH := (metrics.Ascent + metrics.Descent).Ceil() // rendered glyph-box height, px
-	shadow := max(1, boxH/14)                         // drop-shadow thickness scales with the glyph size
+	shadow := max(1, boxH/14)                         //nolint:mnd // drop-shadow thickness scales with the glyph size
 	lw := font.MeasureString(face, text).Ceil() + shadow
 	lh := boxH + shadow
 
@@ -318,14 +318,14 @@ func drawBackgroundText(c *mapCanvas, x, y float64, text string, face font.Face,
 	// place the layer centered on the projected point (plus the optional offset) and blend it in at 20%
 	center, _ := c.LocToPoint(x, y) // ignore the in-view flag (clipping handles off-canvas)
 	center = center.Add(image.Pt(opt.xOffsetPx, opt.yOffsetPx))
-	dstX, dstY := center.X-lw/2, center.Y-lh/2
+	dstX, dstY := center.X-lw/2, center.Y-lh/2 //nolint:mnd
 
 	draw.DrawMask(
 		c.Image(),
 		image.Rect(dstX, dstY, dstX+lw, dstY+lh),
 		layer,
 		image.Point{},
-		image.NewUniform(color.Alpha{A: 60}), // `A` is opacity 0-255
+		image.NewUniform(color.Alpha{A: 60}), //nolint:mnd // `A` is opacity 0-255
 		image.Point{},
 		draw.Over,
 	)
@@ -344,7 +344,7 @@ func drawForegroundText(c *mapCanvas, x, y float64, text string, face font.Face,
 	}
 
 	metrics := face.Metrics()
-	shadow := max(1, (metrics.Ascent+metrics.Descent).Ceil()/18) // drop-shadow thickness scales with the glyph size
+	shadow := max(1, (metrics.Ascent+metrics.Descent).Ceil()/18) //nolint:mnd
 	width := font.MeasureString(face, text)
 
 	// center the glyph box on the projected point (plus the optional offset)
@@ -381,7 +381,7 @@ func drawPoint(c *mapCanvas, x, y float64, diameter int, fill color.Color, opts 
 
 	var (
 		core  = float64(diameter) / 2
-		outer = core + math.Max(1, float64(diameter)/10) // + white ring, 10% of the diameter (min 1px)
+		outer = core + math.Max(1, float64(diameter)/10) //nolint:mnd // + white ring, 10% of the diameter (min 1px)
 		img   = c.Image()
 		bound = int(outer) + 1
 	)
@@ -389,7 +389,7 @@ func drawPoint(c *mapCanvas, x, y float64, diameter int, fill color.Color, opts 
 	fr, fg, fb, _ := fill.RGBA()
 
 	// blend a 16-bit channel from white toward the fill by t, returning an 8-bit value
-	toFill := func(ch uint32, t float64) float64 { return (float64(ch)*t + 0xFFFF*(1-t)) / 257 }
+	toFill := func(ch uint32, t float64) float64 { return (float64(ch)*t + 0xFFFF*(1-t)) / 257 } //nolint:mnd
 
 	for dy := -bound; dy <= bound; dy++ {
 		for dx := -bound; dx <= bound; dx++ {
@@ -399,6 +399,7 @@ func drawPoint(c *mapCanvas, x, y float64, diameter int, fill color.Color, opts 
 			if shape == 0 {
 				continue
 			}
+
 			fillT := math.Min(1, math.Max(0, core+0.5-d)) // anti-aliased inner edge (core vs white ring)
 
 			// color = white ring leaped to the fill across the core edge, composited over the map by shape
@@ -408,7 +409,7 @@ func drawPoint(c *mapCanvas, x, y float64, diameter int, fill color.Color, opts 
 				R: uint8(toFill(fr, fillT)*shape + float64(bg.R)*(1-shape)),
 				G: uint8(toFill(fg, fillT)*shape + float64(bg.G)*(1-shape)),
 				B: uint8(toFill(fb, fillT)*shape + float64(bg.B)*(1-shape)),
-				A: 0xFF,
+				A: 0xFF, //nolint:mnd
 			})
 		}
 	}
@@ -420,6 +421,7 @@ func titleCase(s string) string {
 	b.Grow(len(s))
 
 	wordStart := true
+
 	for _, r := range s {
 		switch {
 		case unicode.IsSpace(r):

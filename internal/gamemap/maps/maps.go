@@ -31,7 +31,7 @@ import "image"
 //
 //	px = gx / MapSize() * MapSizePX()
 //	py = (MapSize() - gy) / MapSize() * MapSizePX()
-type Map interface {
+type Map interface { //nolint:iface
 	// Name is the map's identifier (e.g. "chernarusplus").
 	Name() string
 
