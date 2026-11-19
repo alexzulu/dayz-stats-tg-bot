@@ -190,7 +190,6 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 
 		// ping the daemon with the given credentials
 		_, connErr := statez.NewClient(baseURL, token).World(pingCtx)
-
 		if connErr != nil {
 			if errors.Is(connErr, context.DeadlineExceeded) {
 				connErr = fmt.Errorf("timeout while connecting to %s (daemon may be down or unreachable)", baseURL)
@@ -225,7 +224,7 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 			})
 		}
 
-		defer func() { _ = react(c, reactEmojiThumbsUp) }()
+		defer func() { _ = react(c, reactEmojiThumbsUp) }() //nolint:errcheck
 
 		return c.Reply(&tele.InputRichMessage{
 			Markdown:            fmt.Sprintf("**Server `%s` added successfully**", name),
@@ -246,6 +245,8 @@ func (h *Handlers) handleServers() tele.HandlerFunc {
 
 		var b strings.Builder
 
+		b.Grow(64 + (len(cfg.Servers) * 64)) //nolint:mnd // rough estimate
+
 		b.WriteString("| Name | StateZ Base URL |\n")
 		b.WriteString("|:----:|:--------------:|\n")
 
@@ -265,14 +266,32 @@ func (h *Handlers) handleRemoveServer(log *slog.Logger) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		args := ParseCommandArgs(c.Text())
 		if len(args) != 1 {
-			return c.Reply(&tele.InputRichMessage{Markdown: "" +
-				"Removes a server from the bot's configuration (this action cannot be undone).\n\n" +
-				"###### Usage: `/" + cmdRemoveServer + " <name>`\n\n" +
-				"| Argument | Description           |\n" +
-				"|---------:|:----------------------|\n" +
-				"| `name`   | Internal server alias |\n\n" +
-				"> *Example: `/" + cmdRemoveServer + " chernarus`*",
-			})
+			var b strings.Builder
+
+			b.Grow(256 + (len(h.cfg.Config().Servers) * 32)) //nolint:mnd // rough estimate
+
+			b.WriteString("Removes a server from the bot's configuration (this action cannot be undone).\n\n")
+			b.WriteString("###### Usage: `/" + cmdRemoveServer + " <name>`\n\n")
+			b.WriteString("| Argument | Description           |\n")
+			b.WriteString("|---------:|:----------------------|\n")
+			b.WriteString("| `name`   | Internal server alias |\n\n")
+			b.WriteString("> *Example: `/" + cmdRemoveServer + " chernarus`*")
+
+			if servers := h.cfg.Config().Servers; len(servers) > 0 {
+				b.WriteString("\n\n")
+				b.WriteString("---\n\n")
+				b.WriteString("Configured servers:\n")
+
+				for name := range servers {
+					b.WriteString("- `/")
+					b.WriteString(cmdRemoveServer)
+					b.WriteRune(' ')
+					b.WriteString(name)
+					b.WriteString("`\n")
+				}
+			}
+
+			return c.Reply(&tele.InputRichMessage{Markdown: b.String()})
 		}
 
 		name := args[0]
@@ -320,11 +339,11 @@ func (h *Handlers) handleRemoveServer(log *slog.Logger) tele.HandlerFunc {
 			})
 		}
 
-		defer func() { _ = react(c, reactEmojiThumbsUp) }()
+		defer func() { _ = react(c, reactEmojiThumbsUp) }() //nolint:errcheck
 
 		return c.Reply(&tele.InputRichMessage{
 			Markdown:            fmt.Sprintf("**Server `%s` removed successfully**", name),
 			SkipEntityDetection: true,
-		})
+		}, &tele.ReplyMarkup{RemoveKeyboard: true}) // dismiss the tap-to-run keyboard
 	}
 }
