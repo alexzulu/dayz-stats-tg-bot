@@ -122,6 +122,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return fmt.Errorf("registering Telegram handlers: %w", err)
 	}
 
+	if err := tgBot.Start(); err != nil {
+		return fmt.Errorf("starting Telegram bot: %w", err)
+	}
+
 	defer func(t time.Time) { log.Info("Exiting", slog.String("uptime", time.Since(t).String())) }(time.Now())
 
 	<-ctx.Done()

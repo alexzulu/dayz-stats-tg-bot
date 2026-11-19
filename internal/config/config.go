@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -19,8 +20,13 @@ type (
 	//
 	// NOTE: when adding map or slice fields, deep-copy them in the Config() method to avoid data races.
 	Config struct {
-		ConfigField1 string `json:"config_field_1"`
-		ConfigField2 int    `json:"config_field_2"`
+		Servers map[string]ConfigServer `json:"servers"` // server name (alias) -> server config
+	}
+
+	// ConfigServer holds the configuration for a single DayZ server with StateZ daemon installed.
+	ConfigServer struct {
+		BaseUrl   string `json:"base_url"`
+		AuthToken string `json:"auth_token"`
 	}
 )
 
@@ -64,7 +70,12 @@ func (f *File) Config() Config {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.cfg // returned by value, so callers can't mutate shared state
+	cfg := f.cfg // copy the struct to avoid callers mutating shared state
+
+	cfg.Servers = make(map[string]ConfigServer, len(f.cfg.Servers))
+	maps.Copy(cfg.Servers, f.cfg.Servers)
+
+	return cfg
 }
 
 // Save writes the config to disk atomically.

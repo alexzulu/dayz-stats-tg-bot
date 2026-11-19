@@ -79,6 +79,8 @@ type Command struct {
 // Commands with a nil handler are skipped, handlers fire only in private chats.
 //
 // The variadic m is applied to every command as outermost middleware (before per-command Middleware).
+//
+// NOTE: You need to call Start to start the polling loop after registering commands.
 func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot.MiddlewareFunc) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -86,12 +88,6 @@ func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot
 	bot, bErr := t.bot()
 	if bErr != nil {
 		return bErr
-	}
-
-	if t.started {
-		bot.Stop()
-
-		t.started = false
 	}
 
 	cmds := make([]telebot.Command, 0, len(commands))
@@ -123,6 +119,7 @@ func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot
 		)
 	}
 
+	// clear any existing commands in default scope
 	if err := bot.DeleteCommands(); err != nil {
 		return err
 	}
@@ -131,11 +128,53 @@ func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot
 		return err
 	}
 
-	if !t.started {
-		go bot.Start()
+	return nil
+}
 
-		t.started = true
+// RegisterPrivateTextHandler wires a handler for all text messages in private chats.
+//
+// NOTE: You need to call Start to start the polling loop after registering handlers.
+func (t *Telegram) RegisterPrivateTextHandler(h telebot.HandlerFunc, m ...telebot.MiddlewareFunc) error {
+	if h == nil {
+		return nil // no-op
 	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	bot, bErr := t.bot()
+	if bErr != nil {
+		return bErr
+	}
+
+	bot.Handle(telebot.OnText, func(c telebot.Context) error {
+		if chat := c.Chat(); chat != nil && chat.Type != telebot.ChatPrivate {
+			return nil
+		}
+
+		return h(c)
+	}, m...)
+
+	return nil
+}
+
+// Start starts the polling loop if it is not already running, or restarts otherwise. Safe to call more than once.
+func (t *Telegram) Start() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	bot, err := t.bot()
+	if err != nil {
+		return err
+	}
+
+	if t.started {
+		bot.Stop()
+	}
+
+	go bot.Start()
+
+	t.started = true
 
 	return nil
 }
