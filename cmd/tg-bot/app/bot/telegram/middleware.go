@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 
@@ -56,8 +57,7 @@ func loggerFieldsFromTgContext(c tele.Context) []slog.Attr {
 
 	if sender := c.Sender(); sender != nil {
 		fields = append(fields,
-			slog.Any("from_user_id", sender.ID),
-			slog.Any("from_user_username", sender.Username),
+			slog.String("from_user", fmt.Sprintf("%d:%s", sender.ID, sender.Username)),
 		)
 	}
 
