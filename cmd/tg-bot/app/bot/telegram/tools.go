@@ -72,7 +72,7 @@ var escapeMarkdownReplacer = strings.NewReplacer("&", "&amp;", "<", "&lt;") //no
 
 // EscapeMarkdown makes s safe to embed in a tele.InputRichMessage{Markdown: ...} so it renders as the literal
 // text given. Telegram Rich Markdown interprets HTML tags and decodes entities, and only honors a backslash
-// before a subset of punctuation (both verified empirically), so escaping is two steps: HTML entities for the
+// before a subset of punctuation (both verified empirically), so escaping is two steps - HTML entities for the
 // characters a backslash can't neutralize, then a backslash before the Markdown-significant ones.
 //
 // It does NOT stop entity auto-detection (URLs, @mentions, #tags, emails, phones, /commands) - send the message

@@ -61,3 +61,31 @@ func TestValidateBaseURL(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAuthToken(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		give        string
+		wantErr     bool
+		errContains string
+	}{
+		"typical token":                 {give: "s3cr3t-Token_123", wantErr: false},
+		"printable punctuation allowed": {give: "aB.9/_+=:~|&", wantErr: false},
+		"empty rejected":                {give: "", wantErr: true, errContains: "must not be empty"},
+		"newline rejected":              {give: "abc\ndef", wantErr: true, errContains: "control characters"},
+		"tab rejected":                  {give: "abc\tdef", wantErr: true, errContains: "control characters"},
+		"del rejected":                  {give: "abc\x7fdef", wantErr: true, errContains: "control characters"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := telegram.ValidateAuthToken(tt.give)
+			if tt.wantErr {
+				assert.ErrorContains(t, err, tt.errContains)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

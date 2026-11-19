@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	tele "gopkg.in/telebot.v4"
@@ -13,6 +14,69 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
+
+// Handlers holds the bot's command handlers and the config/admin list they operate on.
+type Handlers struct {
+	tgAdminIDs []int64
+	cfg        *config.File
+}
+
+// NewHandlers returns handlers whose admin-only commands are restricted to the given Telegram user IDs.
+func NewHandlers(tgAdminIDs []int64, cfg *config.File) *Handlers {
+	return &Handlers{
+		tgAdminIDs: tgAdminIDs,
+		cfg:        cfg,
+	}
+}
+
+const (
+	cmdPing = "ping"
+
+	cmdAddServer    = "servers_add"
+	cmdListServers  = "servers_list"
+	cmdRemoveServer = "servers_remove"
+)
+
+// Register wires the private commands into b, guarded by panic recovery and request logging applied to every
+// command. Admin-only commands additionally carry a whitelist middleware restricting them to h.tgAdminIDs.
+func (h *Handlers) Register(ctx context.Context, log *slog.Logger, b *bot.Telegram) error {
+	// restricts a command to the configured admin IDs; attached per-command via Command.Middleware
+	auth := NewAuthMiddleware(ctx, log, h.tgAdminIDs)
+
+	if err := b.RegisterPrivateCommands(
+		[]bot.Command{
+			{
+				Text:        cmdPing,
+				Description: "Check if the bot is alive",
+				Handler:     h.handlePing(),
+			},
+			{
+				Text:        cmdAddServer,
+				Description: "<name> <statez_base_url> <statez_auth_token> - add a new server",
+				Handler:     h.handleAddServer(ctx, log),
+				Middleware:  []tele.MiddlewareFunc{auth},
+			},
+			{
+				Text:        cmdListServers,
+				Description: "List all configured servers",
+				Handler:     h.handleServers(),
+				Middleware:  []tele.MiddlewareFunc{auth},
+			},
+			{
+				Text:        cmdRemoveServer,
+				Description: "<name> - remove a server",
+				Handler:     h.handleRemoveServer(log),
+				Middleware:  []tele.MiddlewareFunc{auth},
+			},
+		},
+		NewRecoverMiddleware(ctx, log),
+		NewLoggerMiddleware(ctx, log),
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // Rich Markdown (Bot API 10.1+, GitHub-Flavored where possible) - send via tele.InputRichMessage{Markdown: ...}.
 // Telegram parses it server-side; ParseMode is ignored.
@@ -55,49 +119,6 @@ import (
 //	Text with a note[^1]. (footnote ref)
 //	[^1]: footnote definition
 
-// Handlers holds the bot's command handlers and the config/admin list they operate on.
-type Handlers struct {
-	tgAdminIDs []int64
-	cfg        *config.File
-}
-
-// NewHandlers returns handlers whose admin-only commands are restricted to the given Telegram user IDs.
-func NewHandlers(tgAdminIDs []int64, cfg *config.File) *Handlers {
-	return &Handlers{
-		tgAdminIDs: tgAdminIDs,
-		cfg:        cfg,
-	}
-}
-
-// Register wires the private commands into b, guarded by panic recovery and request logging applied to every
-// command. Admin-only commands additionally carry a whitelist middleware restricting them to h.tgAdminIDs.
-func (h *Handlers) Register(ctx context.Context, log *slog.Logger, b *bot.Telegram) error {
-	// restricts a command to the configured admin IDs; attached per-command via Command.Middleware
-	auth := NewAuthMiddleware(ctx, log, h.tgAdminIDs)
-
-	if err := b.RegisterPrivateCommands(
-		[]bot.Command{
-			{
-				Text:        "ping",
-				Description: "Check if the bot is alive",
-				Handler:     h.handlePing(),
-			},
-			{
-				Text:        "add_server",
-				Description: "<name> <statez_base_url> <statez_auth_token> - add a new server",
-				Handler:     h.handleAddServer(ctx, log),
-				Middleware:  []tele.MiddlewareFunc{auth},
-			},
-		},
-		NewRecoverMiddleware(ctx, log),
-		NewLoggerMiddleware(ctx, log),
-	); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (h *Handlers) handlePing() tele.HandlerFunc {
 	return func(c tele.Context) error {
 		if user := c.Sender(); user != nil {
@@ -116,13 +137,14 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 		args := ParseCommandArgs(c.Text())
 		if len(args) != 3 { //nolint:mnd
 			return c.Reply(&tele.InputRichMessage{Markdown: "" +
-				"###### Usage: `/add_server <name> <statez_base_url> <statez_auth_token>`\n\n" +
+				"Adds a new server to the bot's configuration.\n\n" +
+				"###### Usage: `/" + cmdAddServer + " <name> <statez_base_url> <statez_auth_token>`\n\n" +
 				"| Argument            | Description                                        |\n" +
 				"|--------------------:|:---------------------------------------------------|\n" +
 				"| `name`              | Internal server alias                              |\n" +
 				"| `statez_base_url`   | StateZ daemon address, e.g. `https://1.2.3.4:8080` |\n" +
 				"| `statez_auth_token` | StateZ daemon authorization token                  |\n\n" +
-				"> *Example: `/add_server chernarus https://1.2.3.4:8080 s3cr3t-token`*"})
+				"> *Example: `/" + cmdAddServer + " chernarus https://1.2.3.4:8080 s3cr3t-token`*"})
 		}
 
 		name, baseURL, token := args[0], args[1], args[2]
@@ -143,28 +165,31 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 			})
 		}
 
-		if _, exists := h.cfg.Config().Servers[name]; exists {
+		if err := ValidateAuthToken(token); err != nil {
 			return c.Reply(&tele.InputRichMessage{
-				Markdown:            fmt.Sprintf("**Server %s already exists**", EscapeMarkdown(name)),
+				Markdown:            "**Invalid auth token**: " + EscapeMarkdown(err.Error()),
 				SkipEntityDetection: true,
 			})
 		}
+
+		if _, exists := h.cfg.Config().Servers[name]; exists {
+			return c.Reply(&tele.InputRichMessage{
+				Markdown:            fmt.Sprintf("**Server %s already exists**", name),
+				SkipEntityDetection: true,
+			})
+		}
+
+		baseURL = strings.TrimRight(baseURL, "/ ") + "/" // ensure a trailing slash
 
 		// verify the credentials reach the daemon before persisting anything
 		pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:mnd
 		defer cancel()
 
 		// show the user that we're still alive while we wait for the ping to complete
-		_, _ = notify(pingCtx, c, tele.FindingLocation), react(c, reactEmojiEyes) //nolint:errcheck
-
-		// clear the reaction when we're done
-		defer func() { _ = react(c) }() //nolint:errcheck
+		_ = notify(pingCtx, c, tele.FindingLocation) //nolint:errcheck
 
 		// ping the daemon with the given credentials
 		_, connErr := statez.NewClient(baseURL, token).World(pingCtx)
-
-		// stops the notify loop right after the ping returns (sending the result below also clears the chat action)
-		cancel()
 
 		if connErr != nil {
 			if errors.Is(connErr, context.DeadlineExceeded) {
@@ -188,7 +213,7 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 		if err := h.cfg.Save(); err != nil {
 			h.cfg.Update(func(cfg *config.Config) { delete(cfg.Servers, name) }) // roll back so memory matches disk
 
-			log.Error("failed to save config after add_server",
+			log.Error("failed to save config after "+cmdAddServer,
 				slog.String("error", err.Error()),
 				slog.String("server_name", name),
 				slog.String("base_url", baseURL),
@@ -200,8 +225,105 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 			})
 		}
 
+		defer func() { _ = react(c, reactEmojiThumbsUp) }()
+
 		return c.Reply(&tele.InputRichMessage{
 			Markdown:            fmt.Sprintf("**Server `%s` added successfully**", name),
+			SkipEntityDetection: true,
+		})
+	}
+}
+
+func (h *Handlers) handleServers() tele.HandlerFunc {
+	return func(c tele.Context) error {
+		cfg := h.cfg.Config()
+
+		if len(cfg.Servers) == 0 {
+			return c.Reply(&tele.InputRichMessage{
+				Markdown: "**No servers configured yet**. Use /" + cmdAddServer + " to add one",
+			})
+		}
+
+		var b strings.Builder
+
+		b.WriteString("| Name | StateZ Base URL |\n")
+		b.WriteString("|:----:|:--------------:|\n")
+
+		for name, server := range cfg.Servers {
+			b.WriteString("| `")
+			b.WriteString(name) // validated on adding and clear
+			b.WriteString("` | `")
+			b.WriteString(server.BaseUrl) // validated on adding and clear
+			b.WriteString("` |\n")
+		}
+
+		return c.Reply(&tele.InputRichMessage{Markdown: b.String()})
+	}
+}
+
+func (h *Handlers) handleRemoveServer(log *slog.Logger) tele.HandlerFunc {
+	return func(c tele.Context) error {
+		args := ParseCommandArgs(c.Text())
+		if len(args) != 1 {
+			return c.Reply(&tele.InputRichMessage{Markdown: "" +
+				"Removes a server from the bot's configuration (this action cannot be undone).\n\n" +
+				"###### Usage: `/" + cmdRemoveServer + " <name>`\n\n" +
+				"| Argument | Description           |\n" +
+				"|---------:|:----------------------|\n" +
+				"| `name`   | Internal server alias |\n\n" +
+				"> *Example: `/" + cmdRemoveServer + " chernarus`*",
+			})
+		}
+
+		name := args[0]
+
+		if err := ValidateServerName(name); err != nil {
+			return c.Reply(&tele.InputRichMessage{
+				Markdown:            "**Invalid server name**: " + EscapeMarkdown(err.Error()),
+				SkipEntityDetection: true,
+			})
+		}
+
+		var (
+			found    bool
+			snapshot config.ConfigServer
+		)
+
+		h.cfg.Update(func(cfg *config.Config) {
+			snapshot, found = cfg.Servers[name]
+			if !found {
+				return
+			}
+
+			delete(cfg.Servers, name)
+		})
+
+		if !found {
+			return c.Reply(&tele.InputRichMessage{
+				Markdown:            fmt.Sprintf("**Server `%s` does not exist**", name),
+				SkipEntityDetection: true,
+			})
+		}
+
+		if err := h.cfg.Save(); err != nil {
+			// restore in-memory config to match disk
+			h.cfg.Update(func(cfg *config.Config) { cfg.Servers[name] = snapshot })
+
+			log.Error("failed to save config after "+cmdRemoveServer,
+				slog.String("error", err.Error()),
+				slog.String("server_name", name),
+			)
+
+			return c.Reply(&tele.InputRichMessage{
+				Markdown:            "**Failed to save the config**: " + EscapeMarkdown(err.Error()),
+				SkipEntityDetection: true,
+			})
+		}
+
+		defer func() { _ = react(c, reactEmojiThumbsUp) }()
+
+		return c.Reply(&tele.InputRichMessage{
+			Markdown:            fmt.Sprintf("**Server `%s` removed successfully**", name),
 			SkipEntityDetection: true,
 		})
 	}
