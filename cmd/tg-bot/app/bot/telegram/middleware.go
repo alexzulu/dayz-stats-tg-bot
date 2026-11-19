@@ -1,4 +1,4 @@
-package handlers
+package telegram
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	mw "gopkg.in/telebot.v4/middleware"
 )
 
-// TgLoggerMiddleware returns a middleware that logs incoming messages with structured logging.
-func TgLoggerMiddleware(ctx context.Context, log *slog.Logger) tele.MiddlewareFunc {
+// NewLoggerMiddleware returns a middleware that logs incoming messages with structured logging.
+func NewLoggerMiddleware(ctx context.Context, log *slog.Logger) tele.MiddlewareFunc {
 	return func(next tele.HandlerFunc) tele.HandlerFunc {
 		return func(c tele.Context) error {
 			log.LogAttrs(ctx, slog.LevelDebug, "Incoming message received", loggerFieldsFromTgContext(c)...)
@@ -20,8 +20,8 @@ func TgLoggerMiddleware(ctx context.Context, log *slog.Logger) tele.MiddlewareFu
 	}
 }
 
-// TgAuthMiddleware returns a middleware that checks if the sender is in the list of admin IDs.
-func TgAuthMiddleware(ctx context.Context, log *slog.Logger, adminIDs []int64) tele.MiddlewareFunc {
+// NewAuthMiddleware returns a middleware that checks if the sender is in the list of admin IDs.
+func NewAuthMiddleware(ctx context.Context, log *slog.Logger, adminIDs []int64) tele.MiddlewareFunc {
 	return func(next tele.HandlerFunc) tele.HandlerFunc {
 		return func(c tele.Context) error {
 			sender := c.Sender()
@@ -40,9 +40,9 @@ func TgAuthMiddleware(ctx context.Context, log *slog.Logger, adminIDs []int64) t
 	}
 }
 
-// TgRecoverMiddleware returns a middleware that recovers from panics in handlers and logs the error with
+// NewRecoverMiddleware returns a middleware that recovers from panics in handlers and logs the error with
 // structured logging.
-func TgRecoverMiddleware(ctx context.Context, log *slog.Logger) tele.MiddlewareFunc {
+func NewRecoverMiddleware(ctx context.Context, log *slog.Logger) tele.MiddlewareFunc {
 	return mw.Recover(func(err error, c tele.Context) {
 		log.LogAttrs(ctx, slog.LevelError, "Telegram handler panic recovered",
 			append(loggerFieldsFromTgContext(c), slog.String("error", err.Error()))...,

@@ -68,7 +68,7 @@ func NewCachedClient(baseURL, authToken string, cacheTTL time.Duration) *CachedC
 	}
 
 	return &CachedClient{
-		c:   api.NewClient(baseURL, authToken, api.WithInsecureTLS()),
+		c:   NewClient(baseURL, authToken),
 		ttl: cacheTTL,
 	}
 }

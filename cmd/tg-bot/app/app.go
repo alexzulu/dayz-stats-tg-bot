@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/handlers"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/bot/telegram"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )
@@ -24,7 +24,7 @@ func NewApp(name string) *App { return &App{name: name} }
 
 const (
 	envUpdateInterval evnVar = "UPDATE_INTERVAL"
-	envTgBotToken     evnVar = "TG_BOT_TOKEN"
+	envTgBotToken     evnVar = "TG_BOT_TOKEN" //nolint:gosec // it's just a name of an env :D
 	envTgAdminIDs     evnVar = "TG_ADMIN_IDS"
 	envConfigFilePath evnVar = "CONFIG_FILE"
 )
@@ -78,6 +78,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	// parse the Telegram admin IDs
 	tgAdminIDs := make([]int64, 0)
+
 	for id := range strings.SplitSeq(tgAdminIDsStr, ",") {
 		if s := strings.TrimSpace(id); s != "" {
 			v, err := strconv.ParseInt(s, 10, 64)
@@ -99,6 +100,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	log.Info("Loading configuration", slog.String("path", cfgPath))
+
 	cfg := config.NewFile(cfgPath)
 	if err := cfg.Load(); err != nil {
 		return fmt.Errorf("loading config file: %w", err)
@@ -108,6 +110,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	defer func() { _ = tgBot.Close() }()
 
 	log.Info("Pinging Telegram API")
+
 	if err := tgBot.Ping(); err != nil {
 		return fmt.Errorf("pinging Telegram API: %w", err)
 	}
@@ -118,7 +121,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		slog.String("config_file", cfgPath),
 	)
 
-	if err := handlers.NewTelegramHandlers(tgAdminIDs, cfg).Register(ctx, log, tgBot); err != nil {
+	if err := telegram.NewHandlers(tgAdminIDs, cfg).Register(ctx, log, tgBot); err != nil {
 		return fmt.Errorf("registering Telegram handlers: %w", err)
 	}
 
