@@ -1,4 +1,4 @@
-package telegram
+package ping
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-func (h *Handlers) handlePingCommand() tele.HandlerFunc {
+func NewHandler() tele.HandlerFunc {
 	return func(c tele.Context) error {
 		if user := c.Sender(); user != nil {
 			return c.Send(&tele.InputRichMessage{

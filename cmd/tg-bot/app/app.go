@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/bot/telegram"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )

@@ -8,6 +8,7 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/haandlers/ping"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
@@ -69,7 +70,7 @@ func (h *Handlers) Register(ctx context.Context, b *bot.Telegram, tgAdminIDs []i
 			{
 				Text:        "ping",
 				Description: "Check if the bot is alive",
-				Handler:     h.handlePingCommand(),
+				Handler:     ping.NewHandler(),
 			},
 			{
 				Text:        cmdAddServer,
