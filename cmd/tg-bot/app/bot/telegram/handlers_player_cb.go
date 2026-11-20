@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"strings"
 	"sync"
 
 	"gh.tarampamp.am/dayz-statez/server/pkg/api"
@@ -96,6 +97,23 @@ func (h *Handlers) handlePlayerCallback(ctx context.Context) tele.HandlerFunc {
 
 		playerData := (*players)[playerIdx]
 
+		// plain text message with player info
+		var b strings.Builder // TODO: fill all the fields with player info (health, blood, food, water, playtime, kills, etc.)
+
+		b.WriteString("**Nickname**:\t")
+		b.WriteString(playerData.ID.Name)
+		b.WriteString("\n")
+		b.WriteString("- SteamID:\t")
+		b.WriteString(playerData.ID.SteamID)
+		b.WriteString("\n")
+		b.WriteString("- GUID:\t\t")
+		b.WriteString(playerData.ID.GUID)
+		b.WriteString("\n")
+		b.WriteString("- Position:\t")
+		b.WriteString(fmt.Sprintf("[%.2f, %.2f]", playerData.Pos.X, playerData.Pos.Y))
+		b.WriteString("\n")
+		b.WriteString("\n![](tg://photo?id=player-map)")
+
 		playerMap, mErr := func(mapName string) (image.Image, error) {
 			var dayzMap gameMaps.Map
 
@@ -125,9 +143,12 @@ func (h *Handlers) handlePlayerCallback(ctx context.Context) tele.HandlerFunc {
 
 		go func() { _ = pw.CloseWithError(jpeg.Encode(pw, playerMap, &jpeg.Options{Quality: 90})) }() //nolint:mnd
 
-		return c.Send(&tele.Photo{
-			File:    tele.FromReader(pr),
-			Caption: fmt.Sprintf("%+v", playerData),
+		return c.Send(&tele.InputRichMessage{
+			Markdown: b.String(),
+			Media: []tele.InputRichMessageMedia{{
+				ID:    "player-map",
+				Media: &tele.Photo{File: tele.FromReader(pr)},
+			}},
 		})
 	}
 }

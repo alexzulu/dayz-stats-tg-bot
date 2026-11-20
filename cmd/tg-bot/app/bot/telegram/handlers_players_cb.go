@@ -66,7 +66,7 @@ func (h *Handlers) handlePlayersCallback(ctx context.Context) tele.HandlerFunc {
 			names, namesToIDs[p.ID.Name] = append(names, p.ID.Name), p.ID.SteamID
 
 			b.WriteRune('`')
-			b.WriteString(p.ID.Name)
+			b.WriteString(strings.ReplaceAll(p.ID.Name, "`", ""))
 			b.WriteRune('`')
 			if p.State.Godmode {
 				b.WriteString(" 👿")
