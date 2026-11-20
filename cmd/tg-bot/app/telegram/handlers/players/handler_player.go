@@ -6,6 +6,8 @@ import (
 	"image/jpeg"
 	"io"
 	"log/slog"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -85,20 +87,148 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 
 		playerData := (*players)[playerIdx]
 
-		// plain text message with player info
-		var b strings.Builder // TODO: fill all the fields with player info (health, blood, food, water, playtime, kills, etc.)
+		var b strings.Builder
 
-		b.WriteString("**Nickname**:\t")
-		b.WriteString(playerData.ID.Name)
-		b.WriteString("\n")
-		b.WriteString("- SteamID:\t")
-		b.WriteString(playerData.ID.SteamID)
-		b.WriteString("\n")
-		b.WriteString("- GUID:\t\t")
-		b.WriteString(playerData.ID.GUID)
-		b.WriteString("\n")
-		b.WriteString("- Position:\t")
-		b.WriteString(fmt.Sprintf("[%.2f, %.2f]", playerData.Pos.X, playerData.Pos.Y))
+		b.Grow(512) //nolint:mnd // rough estimate of the message size
+
+		b.WriteString("| Nickname | `")
+		b.WriteString(removeBackticks(playerData.ID.Name))
+		b.WriteString("` |\n")
+		b.WriteString("|:---|---:|\n")
+		b.WriteString("| Steam ID | `")
+		b.WriteString(removeBackticks(playerData.ID.SteamID))
+		b.WriteString("` |\n")
+		b.WriteString("| GUID | `")
+		b.WriteString(removeBackticks(playerData.ID.GUID))
+		b.WriteString("` |\n\n")
+
+		b.WriteString("| Character type | ")
+		b.WriteString(playerData.Character.Type)
+		b.WriteString(" |\n")
+		b.WriteString("|:---|---:|\n")
+		b.WriteString("| Gender | ")
+		b.WriteString(playerData.Character.Gender)
+		b.WriteString(" |\n")
+		b.WriteString("| Blood type | ")
+		b.WriteString(playerData.Character.BloodType)
+		b.WriteString(" |\n\n")
+
+		b.WriteString("| ❤️ Health | ")
+		if playerData.Vitals.Health < 0.5 { //nolint:mnd
+			b.WriteString("⚠️ ")
+		}
+		b.WriteString(floatToPercentStr(playerData.Vitals.Health))
+		b.WriteString("% |\n")
+		b.WriteString("|:---|---:|\n")
+		b.WriteString("| 💧 Water | ")
+		if playerData.Vitals.Water < 0.2 { //nolint:mnd
+			b.WriteString("⚠️ ")
+		}
+		b.WriteString(floatToPercentStr(playerData.Vitals.Water))
+		b.WriteString("% |\n")
+		b.WriteString("| 🍏 Food | ")
+		if playerData.Vitals.Energy < 0.2 { //nolint:mnd
+			b.WriteString("⚠️ ")
+		}
+		b.WriteString(floatToPercentStr(playerData.Vitals.Energy))
+		b.WriteString("% |\n")
+		b.WriteString("| 🩸 Blood | ")
+		b.WriteString(floatToPercentStr(playerData.Vitals.Blood))
+		b.WriteString("% |\n")
+		b.WriteString("| Bleeding status | ")
+		if playerData.State.BleedingSources > 0 {
+			b.WriteString("⚠️ Bleeding is present")
+		} else {
+			b.WriteString("No bleeding")
+		}
+		b.WriteString(" |\n")
+		b.WriteString("| ⚡ Shock | ")
+		b.WriteString(floatToPercentStr(playerData.Vitals.Shock))
+		b.WriteString("% |\n")
+		b.WriteString("| ☣️ Toxicity | ")
+		b.WriteString(floatToPercentStr(playerData.Vitals.Toxicity))
+		b.WriteString("% |\n")
+		b.WriteString("| 🦠 Pathogens | ")
+		b.WriteString(strconv.Itoa(playerData.State.AgentsActive))
+		b.WriteString("% |\n")
+		b.WriteString("| 💊 Immunity boosted | ")
+		if playerData.State.ImmunityBoosted {
+			b.WriteString("Yes")
+		} else {
+			b.WriteString("No")
+		}
+		b.WriteString(" |\n")
+		b.WriteString("| 💦 Wetness | ")
+		b.WriteString(fmt.Sprintf("%.0f", playerData.Vitals.Wetness))
+		b.WriteString("% |\n")
+		b.WriteString("| 🌡️ Body temperature | ")
+		b.WriteString(fmt.Sprintf("%.2f °C", playerData.Vitals.TemperatureCelsius))
+		b.WriteString(" |\n")
+		b.WriteString("| ⚖️ Carried weight | ")
+		b.WriteString(fmt.Sprintf("%.2f kg", playerData.WeightGrams/1000)) //nolint:mnd
+		b.WriteString(" |\n")
+		b.WriteString("| In conscious | ")
+		if playerData.State.IsUnconscious {
+			b.WriteString("⚠️ Yes")
+		} else {
+			b.WriteString("No")
+		}
+		b.WriteString(" |\n")
+		b.WriteString("| Handcuffed | ")
+		if playerData.State.IsRestrained {
+			b.WriteString("⚠️ Yes")
+		} else {
+			b.WriteString("No")
+		}
+		b.WriteString(" |\n\n")
+
+		b.WriteString("| Coordinates | ")
+		b.WriteString(fmt.Sprintf("x:%.2f, y:%.2f", playerData.Pos.X, playerData.Pos.Y))
+		b.WriteString(" |\n")
+		b.WriteString("|:---|---:|\n")
+		b.WriteString("| Altitude | ")
+		b.WriteString(fmt.Sprintf("%.2f m", playerData.Pos.Alt))
+		b.WriteString(" |\n")
+		b.WriteString("| Direction | ")
+		b.WriteString(fmt.Sprintf("%.2f °", playerData.Pos.Angle))
+		b.WriteString(" |\n\n")
+
+		b.WriteString("| Average ping | ")
+		avgPing := int(math.Round(float64(playerData.Network.Ping.Min+playerData.Network.Ping.Max) / 2))
+		if avgPing > 200 { //nolint:mnd
+			b.WriteString("⚠️ ")
+		}
+		b.WriteString(strconv.Itoa(avgPing))
+		b.WriteString(" ms |\n")
+		b.WriteString("|:---|---:|\n")
+		b.WriteString("| Minimum ping | ")
+		b.WriteString(strconv.Itoa(playerData.Network.Ping.Min))
+		b.WriteString(" ms |\n")
+		b.WriteString("| Maximum ping | ")
+		b.WriteString(strconv.Itoa(playerData.Network.Ping.Max))
+		b.WriteString(" ms |\n\n")
+
+		b.WriteString("| Total playtime | ")
+		b.WriteString(strconv.Itoa(secondsToHours(playerData.Stats.PlaytimeSeconds)))
+		b.WriteRune(' ')
+		b.WriteString(plural(secondsToHours(playerData.Stats.PlaytimeSeconds), "hour", "hours"))
+		b.WriteString(" |\n")
+		b.WriteString("|:---|---:|\n")
+		b.WriteString("| Distance traveled | ")
+		b.WriteString(fmt.Sprintf("%.2f km", playerData.Stats.DistanceMeters/1000)) //nolint:mnd
+		b.WriteString(" |\n")
+		b.WriteString("| Longest hit | ")
+		b.WriteString(fmt.Sprintf("%.2f m", playerData.Stats.LongestHitMeters))
+		b.WriteString(" |\n")
+		b.WriteString("| Players killed | ")
+		if playerData.Stats.PlayersKilled > 0 {
+			b.WriteString("⚠️ ")
+		}
+		b.WriteString(strconv.Itoa(playerData.Stats.PlayersKilled))
+		b.WriteString(" |\n")
+		b.WriteString("| Infected killed | ")
+		b.WriteString(strconv.Itoa(playerData.Stats.InfectedKilled))
+		b.WriteString(" |\n\n")
 
 		var media []tele.InputRichMessageMedia
 
@@ -112,7 +242,7 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 				pr, pw := io.Pipe()
 				defer func() { _ = pr.Close() }() //nolint:errcheck
 
-				go func() { _ = pw.CloseWithError(jpeg.Encode(pw, img, &jpeg.Options{Quality: 90})) }() //nolint:mnd
+				go func() { _ = pw.CloseWithError(jpeg.Encode(pw, img, &jpeg.Options{Quality: 70})) }() //nolint:mnd
 
 				b.WriteString("\n\n![](tg://photo?id=player-map)")
 				media = append(media, tele.InputRichMessageMedia{

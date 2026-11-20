@@ -3,7 +3,6 @@ package players
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,7 +61,7 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 			names, namesToIDs[p.ID.Name] = append(names, p.ID.Name), p.ID.SteamID
 
 			b.WriteRune('`')
-			b.WriteString(strings.ReplaceAll(p.ID.Name, "`", ""))
+			b.WriteString(removeBackticks(p.ID.Name))
 			b.WriteRune('`')
 			if p.State.Godmode {
 				b.WriteString(" 👼")
@@ -81,10 +80,10 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 			b.WriteString(floatToPercentStr(p.Vitals.Health))
 			b.WriteString(" | ")
 
-			playtimeDays := secondsToHours(p.Stats.PlaytimeSeconds)
-			b.WriteString(strconv.Itoa(playtimeDays))
+			playtime := secondsToHours(p.Stats.PlaytimeSeconds)
+			b.WriteString(strconv.Itoa(playtime))
 			b.WriteRune(' ')
-			b.WriteString(plural(playtimeDays, "hour", "hours"))
+			b.WriteString(plural(playtime, "hour", "hours"))
 			b.WriteString(" | ")
 
 			if p.Stats.PlayersKilled > 0 {
@@ -113,16 +112,4 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 
 		return c.Send(&tele.InputRichMessage{Markdown: b.String()}, &markup)
 	}
-}
-
-func floatToPercentStr(f float64) string { return strconv.Itoa(int(math.Round(f * 100))) } //nolint:mnd
-
-func secondsToHours(seconds float64) int { return int(math.Round(seconds / 3600)) } //nolint:mnd
-
-func plural[T int | float64](value T, singular, plural string) string {
-	if value == 1 {
-		return singular
-	}
-
-	return plural
 }
