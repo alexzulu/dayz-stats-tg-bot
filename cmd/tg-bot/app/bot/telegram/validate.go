@@ -31,6 +31,12 @@ func ValidateServerName(name string) error {
 		return errors.New("must contain at least one letter or digit")
 	}
 
+	// this limit is required to allow pass the name as callback data in Telegram inline buttons, which has a 64-byte
+	// limit (I reserve half of that for the prefix)
+	if len(name) > 32 { //nolint:mnd
+		return errors.New("must not exceed 32 bytes")
+	}
+
 	return nil
 }
 

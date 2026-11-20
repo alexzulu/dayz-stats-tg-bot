@@ -2,6 +2,7 @@ package bot
 
 import (
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ var ErrBotClosed = errors.New("bot is closed")
 // Telegram wraps a single [telebot.Bot] with a concurrency-safe lifecycle.
 type Telegram struct {
 	botToken string
+	log      *slog.Logger
 
 	client  *telebot.Bot
 	started bool
@@ -26,9 +28,10 @@ type Telegram struct {
 
 // NewTelegram returns a Telegram for the given bot token. The bot is not connected until the first method that
 // needs it.
-func NewTelegram(botToken string) *Telegram {
+func NewTelegram(botToken string, log *slog.Logger) *Telegram {
 	return &Telegram{
 		botToken: botToken,
+		log:      log,
 	}
 }
 
@@ -43,9 +46,24 @@ func (t *Telegram) bot() (*telebot.Bot, error) {
 		return t.client, nil
 	}
 
+	onError := func() func(err error, _ telebot.Context) {
+		if t.log != nil {
+			return func(err error, _ telebot.Context) {
+				if err == nil {
+					return
+				}
+
+				t.log.Error(err.Error())
+			}
+		}
+
+		return nil
+	}()
+
 	bot, err := telebot.NewBot(telebot.Settings{
-		Token:  t.botToken,
-		Poller: &telebot.LongPoller{Timeout: 10 * time.Second}, //nolint:mnd
+		Token:   t.botToken,
+		Poller:  &telebot.LongPoller{Timeout: 10 * time.Second}, //nolint:mnd
+		OnError: onError,
 	})
 	if err != nil {
 		return nil, err
@@ -65,7 +83,7 @@ func (t *Telegram) botWithLock() (*telebot.Bot, error) {
 	return t.bot()
 }
 
-// Command represents a Telegram bot command with its text, description, handler, and optional middleware.
+// Command is a Telegram command with its handler, name, description, and optional middleware.
 type Command struct {
 	Text        string
 	Description string
@@ -109,11 +127,11 @@ func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot
 		bot.Handle(
 			"/"+trigger, // telebot routes on "/cmd"; text is bare, so prepend slash
 			func(c telebot.Context) error {
-				if chat := c.Chat(); chat != nil && chat.Type != telebot.ChatPrivate {
-					return nil
+				if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
+					return cmd.Handler(c)
 				}
 
-				return cmd.Handler(c)
+				return nil
 			},
 			append(slices.Clone(globMw), cmd.Middleware...)...,
 		)
@@ -148,12 +166,54 @@ func (t *Telegram) RegisterPrivateTextHandler(h telebot.HandlerFunc, m ...telebo
 	}
 
 	bot.Handle(telebot.OnText, func(c telebot.Context) error {
-		if chat := c.Chat(); chat != nil && chat.Type != telebot.ChatPrivate {
-			return nil
+		if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
+			return h(c)
 		}
 
-		return h(c)
+		return nil
 	}, m...)
+
+	return nil
+}
+
+// Button is a Telegram callback button with its handler and optional middleware.
+type Button struct {
+	Button     telebot.CallbackEndpoint
+	Handler    telebot.HandlerFunc
+	Middleware []telebot.MiddlewareFunc
+}
+
+// RegisterPrivateButtonHandlers wires each button's handler. Handlers fire only in private chats.
+//
+// The variadic globMw is applied to every button as outermost middleware (before per-button Middleware).
+//
+// NOTE: You need to call Start to start the polling loop after registering handlers.
+func (t *Telegram) RegisterPrivateButtonHandlers(btns []Button, globMw ...telebot.MiddlewareFunc) error {
+	if len(btns) == 0 {
+		return nil // no-op
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	bot, bErr := t.bot()
+	if bErr != nil {
+		return bErr
+	}
+
+	for _, btn := range btns {
+		if btn.Handler == nil {
+			continue
+		}
+
+		bot.Handle(btn.Button, func(c telebot.Context) error {
+			if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
+				return btn.Handler(c)
+			}
+
+			return nil
+		}, append(slices.Clone(globMw), btn.Middleware...)...)
+	}
 
 	return nil
 }

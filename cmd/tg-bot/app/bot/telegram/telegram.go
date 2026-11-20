@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,16 +34,24 @@ func NewHandlers(tgAdminIDs []int64, cfg *config.File) *Handlers {
 const (
 	cmdPing = "ping"
 
-	cmdAddServer    = "servers_add"
-	cmdListServers  = "servers_list"
-	cmdRemoveServer = "servers_remove"
+	cmdAddServer   = "add_server"
+	cmdListServers = "servers"
 )
 
 // Register wires the private commands into b, guarded by panic recovery and request logging applied to every
 // command. Admin-only commands additionally carry a whitelist middleware restricting them to h.tgAdminIDs.
 func (h *Handlers) Register(ctx context.Context, log *slog.Logger, b *bot.Telegram) error {
-	// restricts a command to the configured admin IDs; attached per-command via Command.Middleware
-	auth := NewAuthMiddleware(ctx, log, h.tgAdminIDs)
+	var (
+		// buttons "unique" fields should be less than 31 byte and be unique across all buttons in the bot
+		removeServerBtn = tele.Btn{
+			Text:   "Remove server",
+			Unique: "delsrv",
+		}
+
+		recoverMw = NewRecoverMiddleware(ctx, log)
+		loggerMw  = NewLoggerMiddleware(ctx, log)
+		authMw    = NewAuthMiddleware(ctx, log, h.tgAdminIDs)
+	)
 
 	if err := b.RegisterPrivateCommands(
 		[]bot.Command{
@@ -54,70 +64,38 @@ func (h *Handlers) Register(ctx context.Context, log *slog.Logger, b *bot.Telegr
 				Text:        cmdAddServer,
 				Description: "<name> <statez_base_url> <statez_auth_token> - add a new server",
 				Handler:     h.handleAddServer(ctx, log),
-				Middleware:  []tele.MiddlewareFunc{auth},
+				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
 			{
 				Text:        cmdListServers,
-				Description: "List all configured servers",
-				Handler:     h.handleServers(),
-				Middleware:  []tele.MiddlewareFunc{auth},
-			},
-			{
-				Text:        cmdRemoveServer,
-				Description: "<name> - remove a server",
-				Handler:     h.handleRemoveServer(log),
-				Middleware:  []tele.MiddlewareFunc{auth},
+				Description: "Manage configured servers",
+				Handler:     h.handleManageServers(&removeServerBtn),
+				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
 		},
-		NewRecoverMiddleware(ctx, log),
-		NewLoggerMiddleware(ctx, log),
+		recoverMw,
+		loggerMw,
+	); err != nil {
+		return err
+	}
+
+	if err := b.RegisterPrivateButtonHandlers(
+		[]bot.Button{
+			{
+				Button:     &removeServerBtn,
+				Handler:    h.handleRemoveServer(log),
+				Middleware: []tele.MiddlewareFunc{authMw},
+			},
+		},
+		recoverMw,
+		loggerMw,
+		NewAutoCallbackRespondMiddleware(),
 	); err != nil {
 		return err
 	}
 
 	return nil
 }
-
-// Rich Markdown (Bot API 10.1+, GitHub-Flavored where possible) - send via tele.InputRichMessage{Markdown: ...}.
-// Telegram parses it server-side; ParseMode is ignored.
-//
-// Inline:
-//	*italic* or _italic_
-//	**bold** or __bold__
-//	~~strikethrough~~
-//	||spoiler||
-//	==marked== (highlight)
-//	`inline code`
-//	$x^2 + y^2$ (inline formula / LaTeX)
-//
-// Links (text in [], target in ()):
-//	[label](https://t.me/)
-//	[user](tg://user?id=123456789)
-//	![👍](tg://emoji?id=5368324170671202286)   (custom emoji)
-//
-// Images / media (alt usually empty, caption in quotes). Works for jpg/mp4/mp3/gif/zip:
-//   ![](https://host/photo.jpg)
-//   ![](https://host/photo.jpg "caption")
-//   ![](https://host/clip.mp4 "video caption")
-//
-// Tables - alignment via colons (:--- left, :--: center, ---: right).
-//	| Header 1 | Header 2 |
-//	|:---------|:--------:|
-//	| left     | center   |
-//
-// Blocks:
-//	# Heading 1 ... ###### Heading 6
-//	- item   * item   + item (unordered)
-//	1. item  2. item         (ordered)
-//	- [ ] todo   - [x] done  (task list)
-//	> quote line
-//	> next quote line
-//	--- (divider)
-//	```python (fenced code block)
-//	code
-//	```
-//	Text with a note[^1]. (footnote ref)
-//	[^1]: footnote definition
 
 func (h *Handlers) handlePing() tele.HandlerFunc {
 	return func(c tele.Context) error {
@@ -233,7 +211,7 @@ func (h *Handlers) handleAddServer(ctx context.Context, log *slog.Logger) tele.H
 	}
 }
 
-func (h *Handlers) handleServers() tele.HandlerFunc {
+func (h *Handlers) handleManageServers(removeBtn *tele.Btn) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		cfg := h.cfg.Config()
 
@@ -243,58 +221,37 @@ func (h *Handlers) handleServers() tele.HandlerFunc {
 			})
 		}
 
-		var b strings.Builder
+		var (
+			b      strings.Builder
+			markup = &tele.ReplyMarkup{}
+			names  = slices.Sorted(maps.Keys(cfg.Servers)) // stable order
+			btns   = make([]tele.Btn, 0, len(names))
+		)
 
 		b.Grow(64 + (len(cfg.Servers) * 64)) //nolint:mnd // rough estimate
 
 		b.WriteString("| Name | StateZ Base URL |\n")
-		b.WriteString("|:----:|:--------------:|\n")
+		b.WriteString("|:----:|:---------------:|\n")
 
-		for name, server := range cfg.Servers {
+		for _, name := range names {
 			b.WriteString("| `")
 			b.WriteString(name) // validated on adding and clear
 			b.WriteString("` | `")
-			b.WriteString(server.BaseUrl) // validated on adding and clear
+			b.WriteString(cfg.Servers[name].BaseUrl) // validated on adding and clear
 			b.WriteString("` |\n")
+
+			btns = append(btns, markup.Data("🗑️ Remove \""+name+"\"", removeBtn.Unique, name))
 		}
 
-		return c.Reply(&tele.InputRichMessage{Markdown: b.String()})
+		markup.Inline(markup.Split(2, btns)...) //nolint:mnd
+
+		return c.Reply(&tele.InputRichMessage{Markdown: b.String()}, markup)
 	}
 }
 
 func (h *Handlers) handleRemoveServer(log *slog.Logger) tele.HandlerFunc {
 	return func(c tele.Context) error {
-		args := ParseCommandArgs(c.Text())
-		if len(args) != 1 {
-			var b strings.Builder
-
-			b.Grow(256 + (len(h.cfg.Config().Servers) * 32)) //nolint:mnd // rough estimate
-
-			b.WriteString("Removes a server from the bot's configuration (this action cannot be undone).\n\n")
-			b.WriteString("###### Usage: `/" + cmdRemoveServer + " <name>`\n\n")
-			b.WriteString("| Argument | Description           |\n")
-			b.WriteString("|---------:|:----------------------|\n")
-			b.WriteString("| `name`   | Internal server alias |\n\n")
-			b.WriteString("> *Example: `/" + cmdRemoveServer + " chernarus`*")
-
-			if servers := h.cfg.Config().Servers; len(servers) > 0 {
-				b.WriteString("\n\n")
-				b.WriteString("---\n\n")
-				b.WriteString("Configured servers:\n")
-
-				for name := range servers {
-					b.WriteString("- `/")
-					b.WriteString(cmdRemoveServer)
-					b.WriteRune(' ')
-					b.WriteString(name)
-					b.WriteString("`\n")
-				}
-			}
-
-			return c.Reply(&tele.InputRichMessage{Markdown: b.String()})
-		}
-
-		name := args[0]
+		name := c.Data()
 
 		if err := ValidateServerName(name); err != nil {
 			return c.Reply(&tele.InputRichMessage{
@@ -328,7 +285,7 @@ func (h *Handlers) handleRemoveServer(log *slog.Logger) tele.HandlerFunc {
 			// restore in-memory config to match disk
 			h.cfg.Update(func(cfg *config.Config) { cfg.Servers[name] = snapshot })
 
-			log.Error("failed to save config after "+cmdRemoveServer,
+			log.Error("failed to save config after removing server",
 				slog.String("error", err.Error()),
 				slog.String("server_name", name),
 			)
@@ -339,11 +296,9 @@ func (h *Handlers) handleRemoveServer(log *slog.Logger) tele.HandlerFunc {
 			})
 		}
 
-		defer func() { _ = react(c, reactEmojiThumbsUp) }() //nolint:errcheck
-
 		return c.Reply(&tele.InputRichMessage{
 			Markdown:            fmt.Sprintf("**Server `%s` removed successfully**", name),
 			SkipEntityDetection: true,
-		}, &tele.ReplyMarkup{RemoveKeyboard: true}) // dismiss the tap-to-run keyboard
+		})
 	}
 }

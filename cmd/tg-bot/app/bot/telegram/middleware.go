@@ -14,7 +14,18 @@ import (
 func NewLoggerMiddleware(ctx context.Context, log *slog.Logger) tele.MiddlewareFunc {
 	return func(next tele.HandlerFunc) tele.HandlerFunc {
 		return func(c tele.Context) error {
-			log.LogAttrs(ctx, slog.LevelDebug, "Incoming message received", loggerFieldsFromTgContext(c)...)
+			act := func() string {
+				switch {
+				case c.Callback() != nil:
+					return "callback"
+				case c.Message() != nil:
+					return "message"
+				default:
+					return "action"
+				}
+			}()
+
+			log.LogAttrs(ctx, slog.LevelDebug, fmt.Sprintf("Incoming %s received", act), loggerFieldsFromTgContext(c)...)
 
 			return next(c)
 		}
@@ -51,6 +62,9 @@ func NewRecoverMiddleware(ctx context.Context, log *slog.Logger) tele.Middleware
 	})
 }
 
+// NewAutoCallbackRespondMiddleware returns a middleware that automatically responds to every callback.
+func NewAutoCallbackRespondMiddleware() tele.MiddlewareFunc { return mw.AutoRespond() }
+
 // loggerFieldsFromTgContext extracts structured logging fields from a [tele.Context].
 func loggerFieldsFromTgContext(c tele.Context) []slog.Attr {
 	var fields []slog.Attr
@@ -65,6 +79,13 @@ func loggerFieldsFromTgContext(c tele.Context) []slog.Attr {
 		fields = append(fields,
 			slog.Any("message_id", msg.ID),
 			slog.Any("message_text", msg.Text),
+		)
+	}
+
+	if cb := c.Callback(); cb != nil {
+		fields = append(fields,
+			slog.String("callback_unique", cb.Unique),
+			slog.String("callback_data", cb.Data),
 		)
 	}
 

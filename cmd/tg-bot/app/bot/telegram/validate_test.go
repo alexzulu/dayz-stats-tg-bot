@@ -1,6 +1,7 @@
 package telegram_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/bot/telegram"
@@ -21,6 +22,8 @@ func TestValidateServerName(t *testing.T) {
 		"whitespace is rejected":               {give: "my server", wantErr: true, errContains: "contains invalid characters"},
 		"disallowed punctuation is rejected":   {give: "a/b", wantErr: true, errContains: "contains invalid characters"},
 		"non-ascii letter is rejected":         {give: "café", wantErr: true, errContains: "contains invalid characters"},
+		"almost too long":                      {give: strings.Repeat("x", 32), wantErr: false},
+		"too long":                             {give: strings.Repeat("x", 33), wantErr: true, errContains: "must not exceed"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -106,7 +106,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return fmt.Errorf("loading config file: %w", err)
 	}
 
-	tgBot := bot.NewTelegram(tgBotTkn)
+	tgLog := log.With(slog.String("scope", "telegram-bot"))
+
+	tgBot := bot.NewTelegram(tgBotTkn, tgLog)
 	defer func() { _ = tgBot.Close() }()
 
 	log.Info("Pinging Telegram API")
@@ -121,7 +123,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		slog.String("config_file", cfgPath),
 	)
 
-	if err := telegram.NewHandlers(tgAdminIDs, cfg).Register(ctx, log, tgBot); err != nil {
+	if err := telegram.NewHandlers(tgAdminIDs, cfg).Register(ctx, tgLog, tgBot); err != nil {
 		return fmt.Errorf("registering Telegram handlers: %w", err)
 	}
 
