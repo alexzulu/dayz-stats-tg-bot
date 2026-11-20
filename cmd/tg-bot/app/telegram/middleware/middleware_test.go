@@ -1,4 +1,4 @@
-package telegram_test
+package middleware_test
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/bot/telegram"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/middleware"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/testutil/assert"
 )
 
@@ -56,7 +56,7 @@ func TestNewLoggerMiddleware(t *testing.T) {
 
 	var called bool
 
-	handler := telegram.NewLoggerMiddleware(t.Context(), discardLogger())(func(tele.Context) error {
+	handler := middleware.NewLoggerMiddleware(t.Context(), discardLogger())(func(tele.Context) error {
 		called = true
 
 		return wantErr
@@ -87,7 +87,7 @@ func TestNewAuthMiddleware(t *testing.T) {
 
 			var called bool
 
-			handler := telegram.NewAuthMiddleware(t.Context(), discardLogger(), tt.adminIDs)(func(tele.Context) error {
+			handler := middleware.NewAuthMiddleware(t.Context(), discardLogger(), tt.adminIDs)(func(tele.Context) error {
 				called = true
 
 				return nil
@@ -108,7 +108,7 @@ func TestNewRecoverMiddleware(t *testing.T) {
 
 		ctx := newTestContext(t, &tele.User{ID: 1})
 
-		handler := telegram.NewRecoverMiddleware(t.Context(), discardLogger())(func(tele.Context) error {
+		handler := middleware.NewRecoverMiddleware(t.Context(), discardLogger())(func(tele.Context) error {
 			panic(errors.New("boom"))
 		})
 
@@ -124,7 +124,7 @@ func TestNewRecoverMiddleware(t *testing.T) {
 		ctx := newTestContext(t, &tele.User{ID: 1})
 		wantErr := errors.New("handler failed")
 
-		handler := telegram.NewRecoverMiddleware(t.Context(), discardLogger())(func(tele.Context) error {
+		handler := middleware.NewRecoverMiddleware(t.Context(), discardLogger())(func(tele.Context) error {
 			return wantErr
 		})
 

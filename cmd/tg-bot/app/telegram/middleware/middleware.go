@@ -1,4 +1,4 @@
-package telegram
+package middleware
 
 import (
 	"context"

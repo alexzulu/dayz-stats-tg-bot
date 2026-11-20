@@ -44,6 +44,7 @@ func SendRichMarkdown(c tele.Context, markdown string) error {
 }
 
 // SendRichMarkdownError sends a Markdown message to the user with an error message and optional extra lines.
+// Passing an empty prefix, nil error, or no extra lines is okay.
 func SendRichMarkdownError(c tele.Context, prefix string, err error, extra ...string) error {
 	var (
 		b         strings.Builder

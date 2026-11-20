@@ -123,7 +123,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		slog.String("config_file", cfgPath),
 	)
 
-	if err := telegram.NewHandlers(tgLog, cfg).Register(ctx, tgBot, tgAdminIDs); err != nil {
+	if err := telegram.RegisterHandlers(ctx, tgLog, cfg, tgBot, tgAdminIDs); err != nil {
 		return fmt.Errorf("registering Telegram handlers: %w", err)
 	}
 

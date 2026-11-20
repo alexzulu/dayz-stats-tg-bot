@@ -17,8 +17,7 @@ import (
 )
 
 func NewCreateServerHandler(ctx context.Context, log *slog.Logger, cmdName string, cf *config.File) tele.HandlerFunc {
-	usage := "Adds a new server to the bot's configuration.\n\n" +
-		"###### Usage: `/" + cmdName + " <server_name> <statez_base_url> <statez_auth_token>`\n\n" +
+	usage := "###### Usage: `/" + cmdName + " <server_name> <statez_base_url> <statez_auth_token>`\n\n" +
 		"| Argument            | Description                                        |\n" +
 		"|--------------------:|:---------------------------------------------------|\n" +
 		"| `server_name`       | Internal server alias                              |\n" +
