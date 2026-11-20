@@ -1,10 +1,10 @@
-package telegram_test
+package validate_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/bot/telegram"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/validate"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/testutil/assert"
 )
 
@@ -28,7 +28,7 @@ func TestValidateServerName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := telegram.ValidateServerName(tt.give)
+			err := validate.ServerName(tt.give)
 			if tt.wantErr {
 				assert.ErrorContains(t, err, tt.errContains)
 			} else {
@@ -55,7 +55,7 @@ func TestValidateBaseURL(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := telegram.ValidateBaseURL(tt.give)
+			err := validate.BaseURL(tt.give)
 			if tt.wantErr {
 				assert.ErrorContains(t, err, tt.errContains)
 			} else {
@@ -83,7 +83,7 @@ func TestValidateAuthToken(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := telegram.ValidateAuthToken(tt.give)
+			err := validate.AuthToken(tt.give)
 			if tt.wantErr {
 				assert.ErrorContains(t, err, tt.errContains)
 			} else {

@@ -8,7 +8,8 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/haandlers/ping"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/ping"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/servers"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
@@ -75,7 +76,7 @@ func (h *Handlers) Register(ctx context.Context, b *bot.Telegram, tgAdminIDs []i
 			{
 				Text:        cmdAddServer,
 				Description: "<server_name> <statez_base_url> <statez_auth_token> - add a new server",
-				Handler:     h.handleAddServerCommand(ctx),
+				Handler:     servers.NewCreateServerHandler(ctx, h.log, cmdAddServer, h.cfg),
 				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
 			{

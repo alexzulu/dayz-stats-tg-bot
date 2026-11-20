@@ -1,4 +1,4 @@
-package telegram
+package validate
 
 import (
 	"errors"
@@ -7,8 +7,8 @@ import (
 	"unicode"
 )
 
-// ValidateServerName reports whether name is a non-empty alias built only from letters, digits and _ . # -.
-func ValidateServerName(name string) error {
+// ServerName reports whether name is a non-empty alias built only from letters, digits and _ . # -.
+func ServerName(name string) error {
 	if name == "" {
 		return errors.New("must not be empty")
 	}
@@ -40,8 +40,8 @@ func ValidateServerName(name string) error {
 	return nil
 }
 
-// ValidateBaseURL reports whether string is an absolute http(s) URL with a host.
-func ValidateBaseURL(s string) error {
+// BaseURL reports whether string is an absolute http(s) URL with a host.
+func BaseURL(s string) error {
 	u, err := url.Parse(s)
 	if err != nil {
 		return err
@@ -57,10 +57,10 @@ func ValidateBaseURL(s string) error {
 	return nil
 }
 
-// ValidateAuthToken reports whether token is non-empty and free of control characters. Control characters (CR,
+// AuthToken reports whether token is non-empty and free of control characters. Control characters (CR,
 // LF, tab, DEL, ...) would make net/http reject the "Authorization: Bearer <token>" header. The token format
 // itself is the daemon's concern, so nothing else is checked.
-func ValidateAuthToken(token string) error {
+func AuthToken(token string) error {
 	if token == "" {
 		return errors.New("must not be empty")
 	}
