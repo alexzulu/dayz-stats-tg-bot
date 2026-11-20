@@ -21,6 +21,7 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap"
 	gameMaps "github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps/chernarusplus"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps/nasdara"
 )
 
 var ServerPlayerBtn = tele.Btn{Text: "Player details", Unique: "player"}
@@ -238,7 +239,7 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 				PosY:        playerData.Pos.Y,
 				TopLabel:    playerData.ID.Name,
 				BottomLabel: fmt.Sprintf("[%.2f, %.2f]", playerData.Pos.X, playerData.Pos.Y),
-			}); imgErr == nil {
+			}, gamemap.WithPointsOfInterest(true)); imgErr == nil {
 				pr, pw := io.Pipe()
 				defer func() { _ = pr.Close() }() //nolint:errcheck
 
@@ -267,6 +268,8 @@ func getMapByName(mapName string) (gameMaps.Map, error) {
 	switch mapName {
 	case chernarusplus.Map.Name():
 		return chernarusplus.Map, nil
+	case nasdara.Map.Name():
+		return nasdara.Map, nil
 	default:
 		return nil, fmt.Errorf("unsupported map %s", mapName)
 	}
