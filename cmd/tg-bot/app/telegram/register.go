@@ -76,7 +76,7 @@ func RegisterHandlers(
 			},
 			{
 				Button:     &players.ServerPlayersListBtn,
-				Handler:    players.NewServerPlayersListBtnHandler(ctx, cf, cp),
+				Handler:    players.NewServerPlayersListBtnHandler(ctx, log, cf, cp),
 				Middleware: []tele.MiddlewareFunc{authMw},
 			},
 			{
