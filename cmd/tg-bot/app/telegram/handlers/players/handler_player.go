@@ -3,6 +3,7 @@ package players
 import (
 	"context"
 	"fmt"
+	"image"
 	"image/jpeg"
 	"io"
 	"log/slog"
@@ -20,9 +21,6 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/validate"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap"
-	gameMaps "github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps"
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps/chernarusplus"
-	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps/nasdara"
 )
 
 // ServerPlayerBtn is the inline button for a single player's details; its callback payload is
@@ -103,119 +101,93 @@ func NewServerPlayerBtnHandler( //nolint:funlen
 
 		p := (*players)[playerIdx]
 
-		// the card is a stack of 2-column markdown tables; these local helpers keep each row
-		var (
-			b  strings.Builder
-			bw = func(s ...string) {
-				for _, v := range s {
-					if v == "" {
-						continue
-					}
-
-					b.WriteString(v)
-				}
-			}
-			warnIf = func(condition bool) string {
-				if condition {
-					return " ⚠️ "
-				}
-
-				return ""
-			}
-			trnry = func(condition bool, trueVal, falseVal string) string {
-				if condition {
-					return trueVal
-				}
-
-				return falseVal
-			}
-		)
+		// the card is a stack of 2-column markdown tables
+		var b strings.Builder
 
 		b.Grow(512) //nolint:mnd // rough estimate of the message size
 
 		// identity
-		bw("| 👤 Nickname  | `", removeBackticks(p.ID.Name), "` |\n")
-		bw("|:-------------|---:|\n")
-		bw("| 🎮 Steam ID  | `", removeBackticks(p.ID.SteamID), "` |\n")
-		bw("| 🆔 GUID      | `", removeBackticks(p.ID.GUID), "` |\n")
-		bw(
-			"| ", trnry(strings.ToLower(strings.TrimSpace(p.Character.Gender)) == "female", "👩🏻", "👨🏻"), " Character | ",
+		bw(&b, "| 👤 Nickname  | `", removeBackticks(p.ID.Name), "` |\n")
+		bw(&b, "|:-------------|---:|\n")
+		bw(&b, "| 🎮 Steam ID  | `", removeBackticks(p.ID.SteamID), "` |\n")
+		bw(&b, "| 🆔 GUID      | `", removeBackticks(p.ID.GUID), "` |\n")
+		bw(&b,
+			"| ", iff(strings.ToLower(strings.TrimSpace(p.Character.Gender)) == "female", "👩🏻", "👨🏻"), " Character | ",
 			p.Character.Type, " ("+p.Character.Gender+") |\n",
 		)
-		avgPing := int(math.Round(float64(p.Network.Ping.Min+p.Network.Ping.Max) / 2)) //nolint:mnd
-		bw("| 🌐 Ping | ", warnIf(avgPing > 200), strconv.Itoa(avgPing), " ms |\n\n")   //nolint:mnd
+		avgPing := int(math.Round(float64(p.Network.Ping.Min+p.Network.Ping.Max) / 2))   //nolint:mnd
+		bw(&b, "| 🌐 Ping | ", warnIf(avgPing > 200), strconv.Itoa(avgPing), " ms |\n\n") //nolint:mnd
 
 		// vitals - warn glyph on dangerous levels
-		bw("| ❤️ Health | ", warnIf(p.Vitals.Health < 0.5), floatToPercentStr(p.Vitals.Health), "% |\n") //nolint:mnd
-		bw("|:---|---:|\n")
-		bw("| 🩸 Blood (", p.Character.BloodType, ") | ", floatToPercentStr(p.Vitals.Blood), "% |\n")
-		bw(
+		bw(&b, "| ❤️ Health | ", warnIf(p.Vitals.Health < 0.5), percent(p.Vitals.Health), "% |\n") //nolint:mnd
+		bw(&b, "|:---|---:|\n")
+		bw(&b, "| 🩸 Blood (", p.Character.BloodType, ") | ", percent(p.Vitals.Blood), "% |\n")
+		bw(&b,
 			"| 🩹 Blood Loss | ",
 			warnIf(p.State.BleedingSources > 0),
-			trnry(p.State.BleedingSources > 0, "Ongoing", "None"),
+			iff(p.State.BleedingSources > 0, "Ongoing", "None"),
 			" |\n",
 		)
-		bw(
+		bw(&b,
 			"| 💧 Water / 🍏 Food | ",
 			warnIf(p.Vitals.Water < 0.2 || p.Vitals.Energy < 0.2),
-			floatToPercentStr(p.Vitals.Water), "% / ",
-			floatToPercentStr(p.Vitals.Energy), "%",
+			percent(p.Vitals.Water), "% / ",
+			percent(p.Vitals.Energy), "%",
 			" |\n",
 		)
-		bw("| 💦 Wetness | ", fmt.Sprintf("%.0f", p.Vitals.Wetness), "% |\n")
-		bw(
+		bw(&b, "| 💦 Wetness | ", fmt.Sprintf("%.0f", p.Vitals.Wetness), "% |\n")
+		bw(&b,
 			"| 🧠 Consciousness | (",
 			warnIf(p.State.IsUnconscious),
-			trnry(p.State.IsUnconscious, "unconscious", "conscious"), ") ",
-			floatToPercentStr(p.Vitals.Shock), "%",
+			iff(p.State.IsUnconscious, "unconscious", "conscious"), ") ",
+			percent(p.Vitals.Shock), "%",
 			" |\n",
 		)
-		bw("| ☣️ Toxicity | ", floatToPercentStr(p.Vitals.Toxicity), "% |\n")
-		bw("| 🦠 Pathogens | ", strconv.Itoa(p.State.AgentsActive), " |\n")
-		bw("| 💊 Immunity boosted | ", trnry(p.State.ImmunityBoosted, "Yes", "No"), " |\n")
-		bw("| 🌡️ Body temperature | ", floatToIntStr(p.Vitals.TemperatureCelsius), " °C", " |\n")
-		bw("| 🎒 Carried weight | ", floatRound2ToStr(p.WeightGrams/1000), " kg |\n") //nolint:mnd
-		bw("| 🔗 Handcuffed | ", trnry(p.State.IsRestrained, "Yes", "No"), " |\n\n")
+		bw(&b, "| ☣️ Toxicity | ", percent(p.Vitals.Toxicity), "% |\n")
+		bw(&b, "| 🦠 Pathogens | ", strconv.Itoa(p.State.AgentsActive), " |\n")
+		bw(&b, "| 💊 Immunity boosted | ", iff(p.State.ImmunityBoosted, "Yes", "No"), " |\n")
+		bw(&b, "| 🌡️ Body temperature | ", fixed(p.Vitals.TemperatureCelsius, 0), " °C", " |\n")
+		bw(&b, "| 🎒 Carried weight | ", fixed(p.WeightGrams/1000, 2), " kg |\n") //nolint:mnd
+		bw(&b, "| 🔗 Handcuffed | ", iff(p.State.IsRestrained, "Yes", "No"), " |\n\n")
 
 		// position - coordinates link out to an interactive map
-		xStr, yStr := floatRound2ToStr(p.Pos.X), floatRound2ToStr(p.Pos.Y)
-		bw(
+		xStr, yStr := fixed(p.Pos.X, 2), fixed(p.Pos.Y, 2) //nolint:mnd
+		bw(&b,
 			"| 🗺️ Coordinates | ",
 			"[", xStr, " / ", yStr, "](https://dayz.xam.nu/", world.MapName, "#location=", xStr, ";", yStr, ";4)",
 			" |\n",
 		)
-		bw("|:--------------|---:|\n")
-		bw("| 📍 Altitude / Direction | ", floatRound2ToStr(p.Pos.Alt), " m / ", floatRound2ToStr(p.Pos.Angle), " ° |\n\n")
+		bw(&b, "|:--------------|---:|\n")
+		bw(&b, "| 📍 Altitude / Direction | ", fixed(p.Pos.Alt, 2), " m / ", fixed(p.Pos.Angle, 2), " ° |\n\n") //nolint:mnd
 
 		// lifetime stats
 		playtime := secondsToHours(p.Stats.PlaytimeSeconds)
-		bw(
+		bw(&b,
 			"| 📅 Total playtime | ",
 			warnIf(playtime < 1), strconv.Itoa(playtime), " ", plural(playtime, "hour", "hours"),
 			" |\n",
 		)
-		bw("|:-----------------|---:|\n")
-		bw("| 🥾 Distance traveled | ", floatRound2ToStr(p.Stats.DistanceMeters/1000), " km |\n") //nolint:mnd
-		bw("| 🎯 Longest hit | ", floatRound2ToStr(p.Stats.LongestHitMeters), " m |\n")
-		bw("| 🪖 Players killed | ", warnIf(p.Stats.PlayersKilled > 0), strconv.Itoa(p.Stats.PlayersKilled), " |\n")
-		bw("| 🧟 Infected killed | ", strconv.Itoa(p.Stats.InfectedKilled), " |\n\n")
+		bw(&b, "|:-----------------|---:|\n")
+		bw(&b, "| 🥾 Distance traveled | ", fixed(p.Stats.DistanceMeters/1000, 2), " km |\n") //nolint:mnd
+		bw(&b, "| 🎯 Longest hit | ", fixed(p.Stats.LongestHitMeters, 2), " m |\n")           //nolint:mnd
+		bw(&b, "| 🪖 Players killed | ", warnIf(p.Stats.PlayersKilled > 0), strconv.Itoa(p.Stats.PlayersKilled), " |\n")
+		bw(&b, "| 🧟 Infected killed | ", strconv.Itoa(p.Stats.InfectedKilled), " |\n\n")
 
-		// append a map crop pinning the player's position; best-effort - an unsupported map or a render
-		// error just drops the image and the card is still sent
+		// append a map crop pinning the player's position
 		var media []tele.InputRichMessageMedia
 
-		if gameMap, gmErr := getMapByName(world.MapName); gmErr == nil && gameMap != nil {
+		if gameMap, gmErr := gamemap.MapByName(world.MapName); gmErr == nil && gameMap != nil {
 			if img, imgErr := gamemap.DrawPoint(gameMap, gamemap.Point{
 				PosX:        p.Pos.X,
 				PosY:        p.Pos.Y,
 				TopLabel:    p.ID.Name,
 				BottomLabel: fmt.Sprintf("[%.2f, %.2f]", p.Pos.X, p.Pos.Y),
 			}, gamemap.WithPointsOfInterest(true)); imgErr == nil {
-				// stream the jpeg into the upload through a pipe instead of buffering the whole image
-				pr, pw := io.Pipe()
+				// stream the jpeg into the upload without buffering the whole image
+				pr := gamemap.EncodeReader(img, func(w io.Writer, m image.Image) error {
+					return jpeg.Encode(w, m, &jpeg.Options{Quality: 70}) //nolint:mnd
+				})
 				defer func() { _ = pr.Close() }()
-
-				go func() { _ = pw.CloseWithError(jpeg.Encode(pw, img, &jpeg.Options{Quality: 70})) }() //nolint:mnd
 
 				b.WriteString("\n\n![](tg://photo?id=player-map)")
 
@@ -232,19 +204,5 @@ func NewServerPlayerBtnHandler( //nolint:funlen
 		}
 
 		return c.Send(&tele.InputRichMessage{Markdown: b.String(), Media: media})
-	}
-}
-
-// getMapByName resolves a StateZ world name to its embedded game map, or an error for an unsupported map.
-func getMapByName(mapName string) (gameMaps.Map, error) {
-	// TODO: when in 2nd place the same code is repeated, consider refactoring it into a separate function
-	//       to avoid duplication
-	switch mapName {
-	case chernarusplus.Map.Name():
-		return chernarusplus.Map, nil
-	case nasdara.Map.Name():
-		return nasdara.Map, nil
-	default:
-		return nil, fmt.Errorf("unsupported map %s", mapName)
 	}
 }

@@ -61,9 +61,9 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 
 		b.Grow(256 + (len(*players) * 64)) //nolint:mnd // rough estimate
 
-		b.WriteString("Players online on server `" + serverName + "`:\n\n")
-		b.WriteString("| Nickname | 💧  | 🍏  | 🩸  | ❤️  | Total playtime | Kills |\n")
-		b.WriteString("|:--------:|:---:|:---:|:---:|:---:|:--------------:|:-----:|\n")
+		bw(&b, "Players online on server `"+serverName+"`:\n\n")
+		bw(&b, "| Nickname | 💧  | 🍏  | 🩸  | ❤️  | Total playtime | Kills |\n")
+		bw(&b, "|:--------:|:---:|:---:|:---:|:---:|:--------------:|:-----:|\n")
 
 		// one row per named player; collect a button target for each one that has a steam id
 		for _, p := range *players {
@@ -75,45 +75,23 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 				playerButtons = append(playerButtons, playerBtn{name: p.ID.Name, steamID: p.ID.SteamID})
 			}
 
-			b.WriteString("| `")
-			b.WriteString(removeBackticks(p.ID.Name))
-			b.WriteRune('`')
-
-			if p.State.Godmode {
-				b.WriteString(" 👼")
-			}
-
-			b.WriteString(" | ")
-
-			b.WriteString(floatToPercentStr(p.Vitals.Water))
-			b.WriteString(" | ")
-
-			b.WriteString(floatToPercentStr(p.Vitals.Energy))
-			b.WriteString(" | ")
-
-			b.WriteString(floatToPercentStr(p.Vitals.Blood))
-			b.WriteString(" | ")
-
-			b.WriteString(floatToPercentStr(p.Vitals.Health))
-			b.WriteString(" | ")
-
+			bw(&b, "| `", removeBackticks(p.ID.Name), "`", iff(p.State.Godmode, " 👼", ""), " ")
+			bw(&b, "| ", percent(p.Vitals.Water), " ")
+			bw(&b, "| ", percent(p.Vitals.Energy), " ")
+			bw(&b, "| ", percent(p.Vitals.Blood), " ")
+			bw(&b, "| ", percent(p.Vitals.Health), " ")
 			playtime := secondsToHours(p.Stats.PlaytimeSeconds)
-			b.WriteString(strconv.Itoa(playtime))
-			b.WriteRune(' ')
-			b.WriteString(plural(playtime, "hour", "hours"))
-			b.WriteString(" | ")
+			bw(&b, "| ", strconv.Itoa(playtime), " ", plural(playtime, "hour", "hours"), " ")
+
+			bw(&b, "| ")
 
 			if p.Stats.PlayersKilled > 0 {
-				b.WriteString(strconv.Itoa(p.Stats.PlayersKilled))
-				b.WriteRune(' ')
-				b.WriteString(plural(p.Stats.PlayersKilled, "kill", "kills"))
-				b.WriteRune(' ')
+				bw(&b, strconv.Itoa(p.Stats.PlayersKilled), " ", plural(p.Stats.PlayersKilled, "kill", "kills"), " ")
 			} else {
-				b.WriteString(" - ")
+				bw(&b, " - ")
 			}
 
-			b.WriteString("|")
-			b.WriteRune('\n')
+			bw(&b, "|\n")
 		}
 
 		var (
