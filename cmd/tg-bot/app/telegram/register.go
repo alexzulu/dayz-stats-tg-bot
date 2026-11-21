@@ -10,6 +10,7 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/ping"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/players"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/servers"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/vehicles"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/middleware"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
@@ -59,6 +60,12 @@ func RegisterHandlers(
 				Handler:     players.NewSelectServerHandler(cf),
 				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
+			{
+				Text:        "vehicles",
+				Description: "List vehicles on a server",
+				Handler:     vehicles.NewSelectServerHandler(cf),
+				Middleware:  []tele.MiddlewareFunc{authMw},
+			},
 		},
 		recoverMw,
 		loggerMw,
@@ -82,6 +89,11 @@ func RegisterHandlers(
 			{
 				Button:     &players.ServerPlayerBtn,
 				Handler:    players.NewServerPlayerBtnHandler(ctx, log, cf, cp),
+				Middleware: []tele.MiddlewareFunc{authMw},
+			},
+			{
+				Button:     &vehicles.ServerVehiclesListBtn,
+				Handler:    vehicles.NewServerVehiclesListBtnHandler(ctx, log, cf, cp),
 				Middleware: []tele.MiddlewareFunc{authMw},
 			},
 		},

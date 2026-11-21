@@ -24,6 +24,16 @@ type Point struct {
 	PosX, PosY  float64
 	TopLabel    string
 	BottomLabel string
+	Color       color.Color // optional marker fill; nil falls back to the DrawOption default
+}
+
+// colorOr returns the point's Color if set, or the provided fallback color otherwise.
+func (p Point) colorOr(fallback color.Color) color.Color {
+	if p.Color != nil {
+		return p.Color
+	}
+
+	return fallback
 }
 
 type (
@@ -133,7 +143,7 @@ func DrawPoint(m maps.Map, p Point, opts ...DrawOption) (*image.RGBA, error) {
 		}
 	}
 
-	drawPoint(canvas, p.PosX, p.PosY, opt.markerDiameterPx, opt.markerColor)
+	drawPoint(canvas, p.PosX, p.PosY, opt.markerDiameterPx, p.colorOr(opt.markerColor))
 
 	// top label above the point (negative Y), bottom label below it (positive Y)
 	topFace, fErr := newFontFace(goRegularFont, opt.topFontPt)
@@ -218,7 +228,7 @@ func DrawPoints(m maps.Map, points []Point, opts ...DrawOption) (*image.RGBA, er
 
 	// all markers before any label, so a neighboring marker never lands on top of a label
 	for _, p := range points {
-		drawPoint(canvas, p.PosX, p.PosY, opt.markerDiameterPx, opt.markerColor)
+		drawPoint(canvas, p.PosX, p.PosY, opt.markerDiameterPx, p.colorOr(opt.markerColor))
 	}
 
 	// one regular face per label row, shared across every point

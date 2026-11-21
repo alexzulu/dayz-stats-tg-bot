@@ -39,7 +39,7 @@ func bw(b *strings.Builder, parts ...string) {
 }
 
 // iff returns trueVal when condition holds, otherwise falseVal - an inline ternary.
-func iff(condition bool, trueVal, falseVal string) string {
+func iff[T any](condition bool, trueVal, falseVal T) T {
 	if condition {
 		return trueVal
 	}
