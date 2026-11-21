@@ -6,6 +6,7 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
+// NewHandler returns the /ping handler - a public liveness check.
 func NewHandler() tele.HandlerFunc {
 	return func(c tele.Context) error {
 		if user := c.Sender(); user != nil {

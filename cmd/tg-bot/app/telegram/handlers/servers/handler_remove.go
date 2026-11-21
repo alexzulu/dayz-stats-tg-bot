@@ -12,8 +12,12 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )
 
-var RemoveServerBtn = tele.Btn{Text: "Remove server", Unique: "delsrv"}
+// RemoveServerBtn is the inline "Remove" button rendered by /servers; its callback payload is the name of the
+// server to delete.
+var RemoveServerBtn = tele.Btn{Text: "Remove server", Unique: "delsrv"} //nolint:gochecknoglobals
 
+// NewRemoveServerBtnHandler returns the callback handler for RemoveServerBtn. It removes the server named in the
+// payload.
 func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Pool) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		serverName := c.Data() // received from [RemoveServerBtn] button via `callback_data`
@@ -27,6 +31,7 @@ func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Po
 			serverConfig config.ConfigServer
 		)
 
+		// delete under the lock, keeping the old config so Save failure can be rolled back
 		cf.Update(func(cfg *config.Config) {
 			serverConfig, found = cfg.Servers[serverName]
 			if !found {

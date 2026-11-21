@@ -16,6 +16,8 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
 
+// NewCreateServerHandler returns the /add_server handler. It validates the name/URL/token, pings the StateZ
+// daemon to prove the credentials work, and only then persists the server.
 func NewCreateServerHandler(ctx context.Context, log *slog.Logger, cmdName string, cf *config.File) tele.HandlerFunc {
 	usage := "###### Usage: `/" + cmdName + " <server_name> <statez_base_url> <statez_auth_token>`\n\n" +
 		"| Argument            | Description                                        |\n" +
@@ -33,6 +35,7 @@ func NewCreateServerHandler(ctx context.Context, log *slog.Logger, cmdName strin
 
 		name, baseURL, token := args[0], args[1], args[2]
 
+		// validate all three args before touching the daemon or the config
 		if err := validate.ServerName(name); err != nil {
 			return tt.SendRichMarkdownError(c, "Invalid server name", err)
 		}

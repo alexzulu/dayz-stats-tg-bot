@@ -11,6 +11,8 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )
 
+// NewManageServersHandler returns the /servers handler - a table of configured servers, each row paired with a
+// "Remove" inline button that carries the server name as its callback payload.
 func NewManageServersHandler(cf *config.File) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		cfg := cf.Config()
@@ -32,6 +34,7 @@ func NewManageServersHandler(cf *config.File) tele.HandlerFunc {
 		b.WriteString("| Name | StateZ Base URL |\n")
 		b.WriteString("|:----:|:---------------:|\n")
 
+		// one table row and one remove button per server
 		for _, serverName := range names {
 			b.WriteString("| `")
 			b.WriteString(serverName) // validated on adding

@@ -10,6 +10,8 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )
 
+// NewSelectServerHandler returns the /players handler - a server picker where tapping a server fires
+// ServerPlayersListBtn for it.
 func NewSelectServerHandler(cf *config.File) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		cfg := cf.Config()

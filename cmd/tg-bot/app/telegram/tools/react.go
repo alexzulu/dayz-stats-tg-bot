@@ -4,6 +4,7 @@ import "gopkg.in/telebot.v4"
 
 type reactEmoji rune
 
+// reaction emoji allowlist (Bot API ReactionTypeEmoji); names are self-describing.
 const (
 	ReactEmojiThumbsUp   reactEmoji = '👍'
 	ReactEmojiThumbsDown reactEmoji = '👎'

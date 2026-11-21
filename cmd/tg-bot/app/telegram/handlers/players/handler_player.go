@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gh.tarampamp.am/dayz-statez/server/pkg/api"
 	tele "gopkg.in/telebot.v4"
@@ -24,9 +25,18 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap/maps/nasdara"
 )
 
-var ServerPlayerBtn = tele.Btn{Text: "Player details", Unique: "player"}
+// ServerPlayerBtn is the inline button for a single player's details; its callback payload is
+// "<server_name>|<player_steam_id>".
+var ServerPlayerBtn = tele.Btn{Text: "Player details", Unique: "player"} //nolint:gochecknoglobals
 
-func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config.File, cp *clients.Pool) tele.HandlerFunc {
+// NewServerPlayerBtnHandler returns the callback handler for ServerPlayerBtn. It renders one player's full
+// card (identity, vitals, position, lifetime stats) plus a map crop pinning their current position.
+func NewServerPlayerBtnHandler( //nolint:funlen
+	ctx context.Context,
+	log *slog.Logger,
+	cf *config.File,
+	cp *clients.Pool,
+) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		args := c.Args()
 		if len(args) != 2 { //nolint:mnd
@@ -46,6 +56,7 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 			return tt.SendRichMarkdownError(c, fmt.Sprintf("Server `%s` does not exist", serverName), nil)
 		}
 
+		// players and world come from the same daemon - fetch them concurrently
 		var (
 			client = cp.Get(serverConfig)
 			wg     sync.WaitGroup
@@ -56,14 +67,17 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 			wErr    error
 		)
 
-		wg.Go(func() { players, pErr = client.Players(ctx) })
-		wg.Go(func() { world, wErr = client.World(ctx) })
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:mnd
+		defer cancel()
+
+		wg.Go(func() { players, pErr = client.Players(reqCtx) })
+		wg.Go(func() { world, wErr = client.World(reqCtx) })
 
 		wg.Wait()
 
 		switch {
 		case wErr != nil:
-			return tt.SendRichMarkdownError(c, "Failed to fetch world info", pErr)
+			return tt.SendRichMarkdownError(c, "Failed to fetch world info", wErr)
 		case pErr != nil:
 			return tt.SendRichMarkdownError(c, "Failed to fetch players", pErr)
 		case players == nil || world == nil:
@@ -72,6 +86,7 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 			return tt.SendRichMarkdownError(c, fmt.Sprintf("No players online on server `%s`", serverName), nil)
 		}
 
+		// locate the requested player in the live snapshot - they may have logged off since the list was shown
 		playerIdx := func() int {
 			for i, p := range *players {
 				if p.ID.SteamID == playerSteamID {
@@ -82,12 +97,13 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 			return -1
 		}()
 
-		if playerIdx < 0 || playerIdx >= len(*players) {
+		if playerIdx < 0 {
 			return tt.SendRichMarkdownError(c, fmt.Sprintf("Player is no longer online on server `%s`", serverName), nil)
 		}
 
 		p := (*players)[playerIdx]
 
+		// the card is a stack of 2-column markdown tables; these local helpers keep each row
 		var (
 			b  strings.Builder
 			bw = func(s ...string) {
@@ -117,14 +133,19 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 
 		b.Grow(512) //nolint:mnd // rough estimate of the message size
 
+		// identity
 		bw("| 👤 Nickname  | `", removeBackticks(p.ID.Name), "` |\n")
 		bw("|:-------------|---:|\n")
 		bw("| 🎮 Steam ID  | `", removeBackticks(p.ID.SteamID), "` |\n")
 		bw("| 🆔 GUID      | `", removeBackticks(p.ID.GUID), "` |\n")
-		bw("| 👧🏻 Character | ", p.Character.Type, " ("+p.Character.Gender+") |\n")
-		avgPing := int(math.Round(float64(p.Network.Ping.Min+p.Network.Ping.Max) / 2))    //nolint:mnd
-		bw("| 🌐 Ping | ", warnIf(avgPing > 200), " ", strconv.Itoa(avgPing), " ms |\n\n") //nolint:mnd
+		bw(
+			"| ", trnry(strings.ToLower(strings.TrimSpace(p.Character.Gender)) == "female", "👩🏻", "👨🏻"), " Character | ",
+			p.Character.Type, " ("+p.Character.Gender+") |\n",
+		)
+		avgPing := int(math.Round(float64(p.Network.Ping.Min+p.Network.Ping.Max) / 2)) //nolint:mnd
+		bw("| 🌐 Ping | ", warnIf(avgPing > 200), strconv.Itoa(avgPing), " ms |\n\n")   //nolint:mnd
 
+		// vitals - warn glyph on dangerous levels
 		bw("| ❤️ Health | ", warnIf(p.Vitals.Health < 0.5), floatToPercentStr(p.Vitals.Health), "% |\n") //nolint:mnd
 		bw("|:---|---:|\n")
 		bw("| 🩸 Blood (", p.Character.BloodType, ") | ", floatToPercentStr(p.Vitals.Blood), "% |\n")
@@ -145,26 +166,28 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 		bw(
 			"| 🧠 Consciousness | (",
 			warnIf(p.State.IsUnconscious),
-			trnry(p.State.IsUnconscious, "unconscious", "in conscious"), ") ",
+			trnry(p.State.IsUnconscious, "unconscious", "conscious"), ") ",
 			floatToPercentStr(p.Vitals.Shock), "%",
 			" |\n",
 		)
 		bw("| ☣️ Toxicity | ", floatToPercentStr(p.Vitals.Toxicity), "% |\n")
-		bw("| 🦠 Pathogens | ", strconv.Itoa(p.State.AgentsActive), "% |\n")
+		bw("| 🦠 Pathogens | ", strconv.Itoa(p.State.AgentsActive), " |\n")
 		bw("| 💊 Immunity boosted | ", trnry(p.State.ImmunityBoosted, "Yes", "No"), " |\n")
 		bw("| 🌡️ Body temperature | ", floatToIntStr(p.Vitals.TemperatureCelsius), " °C", " |\n")
 		bw("| 🎒 Carried weight | ", floatRound2ToStr(p.WeightGrams/1000), " kg |\n") //nolint:mnd
 		bw("| 🔗 Handcuffed | ", trnry(p.State.IsRestrained, "Yes", "No"), " |\n\n")
 
+		// position - coordinates link out to an interactive map
 		xStr, yStr := floatRound2ToStr(p.Pos.X), floatRound2ToStr(p.Pos.Y)
 		bw(
-			"| 🗺️ Coordinates | [",
-			xStr, " / ", yStr, "](https://dayz.xam.nu/"+world.MapName+"#location=", xStr, ";", yStr, ";4)",
+			"| 🗺️ Coordinates | ",
+			"[", xStr, " / ", yStr, "](https://dayz.xam.nu/", world.MapName, "#location=", xStr, ";", yStr, ";4)",
 			" |\n",
 		)
 		bw("|:--------------|---:|\n")
 		bw("| 📍 Altitude / Direction | ", floatRound2ToStr(p.Pos.Alt), " m / ", floatRound2ToStr(p.Pos.Angle), " ° |\n\n")
 
+		// lifetime stats
 		playtime := secondsToHours(p.Stats.PlaytimeSeconds)
 		bw(
 			"| 📅 Total playtime | ",
@@ -177,6 +200,8 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 		bw("| 🪖 Players killed | ", warnIf(p.Stats.PlayersKilled > 0), strconv.Itoa(p.Stats.PlayersKilled), " |\n")
 		bw("| 🧟 Infected killed | ", strconv.Itoa(p.Stats.InfectedKilled), " |\n\n")
 
+		// append a map crop pinning the player's position; best-effort - an unsupported map or a render
+		// error just drops the image and the card is still sent
 		var media []tele.InputRichMessageMedia
 
 		if gameMap, gmErr := getMapByName(world.MapName); gmErr == nil && gameMap != nil {
@@ -186,12 +211,14 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 				TopLabel:    p.ID.Name,
 				BottomLabel: fmt.Sprintf("[%.2f, %.2f]", p.Pos.X, p.Pos.Y),
 			}, gamemap.WithPointsOfInterest(true)); imgErr == nil {
+				// stream the jpeg into the upload through a pipe instead of buffering the whole image
 				pr, pw := io.Pipe()
-				defer func() { _ = pr.Close() }() //nolint:errcheck
+				defer func() { _ = pr.Close() }()
 
 				go func() { _ = pw.CloseWithError(jpeg.Encode(pw, img, &jpeg.Options{Quality: 70})) }() //nolint:mnd
 
 				b.WriteString("\n\n![](tg://photo?id=player-map)")
+
 				media = append(media, tele.InputRichMessageMedia{
 					ID:    "player-map",
 					Media: &tele.Photo{File: tele.FromReader(pr)},
@@ -208,6 +235,7 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 	}
 }
 
+// getMapByName resolves a StateZ world name to its embedded game map, or an error for an unsupported map.
 func getMapByName(mapName string) (gameMaps.Map, error) {
 	// TODO: when in 2nd place the same code is repeated, consider refactoring it into a separate function
 	//       to avoid duplication

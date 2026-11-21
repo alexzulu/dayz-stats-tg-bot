@@ -15,6 +15,8 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )
 
+// RegisterHandlers wires every command and inline-button handler onto the bot, gating admin actions behind the
+// auth middleware (ping stays public). It does not start polling - call bot.Start for that.
 func RegisterHandlers(
 	ctx context.Context,
 	log *slog.Logger,
@@ -26,11 +28,12 @@ func RegisterHandlers(
 		recoverMw = middleware.NewRecoverMiddleware(ctx, log)
 		loggerMw  = middleware.NewLoggerMiddleware(ctx, log)
 		authMw    = middleware.NewAuthMiddleware(ctx, log, tgAdminIDs)
-		cp        = clients.NewPool(0)
+		cp        = clients.NewPool(0) // 0 ttl - the pool falls back to the client's default cache window
 	)
 
 	const cmdAddServer = "add_server"
 
+	// commands - advertised in the client menu, every one but ping is admin-gated
 	if err := b.RegisterPrivateCommands(
 		[]bot.Command{
 			{
@@ -63,6 +66,7 @@ func RegisterHandlers(
 		return err
 	}
 
+	// inline-button callbacks - AutoRespond acks every tap so the client stops showing the loading spinner
 	if err := b.RegisterPrivateButtonHandlers(
 		[]bot.Button{
 			{

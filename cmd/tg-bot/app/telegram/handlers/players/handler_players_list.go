@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	tele "gopkg.in/telebot.v4"
 
@@ -15,8 +16,13 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 )
 
-var ServerPlayersListBtn = tele.Btn{Text: "Players online", Unique: "players"}
+// ServerPlayersListBtn is the inline button that lists a server's online players; its callback payload is the
+// server name.
+var ServerPlayersListBtn = tele.Btn{Text: "Players online", Unique: "players"} //nolint:gochecknoglobals
 
+// NewServerPlayersListBtnHandler returns the callback handler for ServerPlayersListBtn. It fetches the server's
+// online players, renders a stats table, and attaches a per-player drill-down button (payload
+// "<server>|<steam_id>") for every player that has a Steam ID.
 func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *clients.Pool) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		serverName := c.Data() // received from [ServerPlayersListBtn] button via `callback_data`
@@ -32,7 +38,10 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 			return tt.SendRichMarkdownError(c, fmt.Sprintf("Server `%s` does not exist", serverName), nil)
 		}
 
-		players, cErr := cp.Get(serverConfig).Players(ctx)
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:mnd
+		defer cancel()
+
+		players, cErr := cp.Get(serverConfig).Players(reqCtx)
 		if cErr != nil {
 			return tt.SendRichMarkdownError(c, "Failed to fetch players", cErr)
 		}
@@ -44,36 +53,36 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 		// sort players to get stable order
 		sort.SliceStable(*players, func(i, j int) bool { return (*players)[i].ID.GUID < (*players)[j].ID.GUID })
 
-		var (
-			names      = make([]string, 0, len(*players))
-			namesToIDs = make(map[string]string, len(*players))
+		type playerBtn struct{ name, steamID string }
 
-			b strings.Builder
-		)
+		playerButtons := make([]playerBtn, 0, len(*players))
+
+		var b strings.Builder
 
 		b.Grow(256 + (len(*players) * 64)) //nolint:mnd // rough estimate
 
-		b.WriteString(fmt.Sprintf("Players online on server `%s`:\n\n", serverName))
+		b.WriteString("Players online on server `" + serverName + "`:\n\n")
 		b.WriteString("| Nickname | 💧  | 🍏  | 🩸  | ❤️  | Total playtime | Kills |\n")
 		b.WriteString("|:--------:|:---:|:---:|:---:|:---:|:--------------:|:-----:|\n")
 
+		// one row per named player; collect a button target for each one that has a steam id
 		for _, p := range *players {
 			if p.ID.Name == "" {
 				continue
 			}
 
-			names = append(names, p.ID.Name)
-
 			if p.ID.SteamID != "" {
-				namesToIDs[p.ID.Name] = p.ID.SteamID
+				playerButtons = append(playerButtons, playerBtn{name: p.ID.Name, steamID: p.ID.SteamID})
 			}
 
-			b.WriteRune('`')
+			b.WriteString("| `")
 			b.WriteString(removeBackticks(p.ID.Name))
 			b.WriteRune('`')
+
 			if p.State.Godmode {
 				b.WriteString(" 👼")
 			}
+
 			b.WriteString(" | ")
 
 			b.WriteString(floatToPercentStr(p.Vitals.Water))
@@ -103,21 +112,18 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 				b.WriteString(" - ")
 			}
 
+			b.WriteString("|")
 			b.WriteRune('\n')
 		}
 
 		var (
 			markup  tele.ReplyMarkup
-			buttons = make([]tele.Btn, 0, len(names))
+			buttons = make([]tele.Btn, 0, len(playerButtons))
 		)
 
-		for _, name := range names {
-			if namesToIDs[name] == "" {
-				continue
-			}
-
+		for _, pb := range playerButtons {
 			// payload (callback_data) will contain `<server_name>|<player_steam_id>`
-			buttons = append(buttons, markup.Data("👤 "+name, ServerPlayerBtn.Unique, serverName, namesToIDs[name]))
+			buttons = append(buttons, markup.Data("👤 "+pb.name, ServerPlayerBtn.Unique, serverName, pb.steamID))
 		}
 
 		markup.Inline(markup.Split(3, buttons)...) //nolint:mnd
