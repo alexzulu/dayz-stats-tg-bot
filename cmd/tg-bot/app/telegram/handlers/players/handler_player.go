@@ -86,159 +86,105 @@ func NewServerPlayerBtnHandler(ctx context.Context, log *slog.Logger, cf *config
 			return tt.SendRichMarkdownError(c, fmt.Sprintf("Player is no longer online on server `%s`", serverName), nil)
 		}
 
-		playerData := (*players)[playerIdx]
+		p := (*players)[playerIdx]
 
-		var b strings.Builder
+		var (
+			b  strings.Builder
+			bw = func(s ...string) {
+				for _, v := range s {
+					if v == "" {
+						continue
+					}
+
+					b.WriteString(v)
+				}
+			}
+			warnIf = func(condition bool) string {
+				if condition {
+					return " ⚠️ "
+				}
+
+				return ""
+			}
+			trnry = func(condition bool, trueVal, falseVal string) string {
+				if condition {
+					return trueVal
+				}
+
+				return falseVal
+			}
+		)
 
 		b.Grow(512) //nolint:mnd // rough estimate of the message size
 
-		b.WriteString("| Nickname | `")
-		b.WriteString(removeBackticks(playerData.ID.Name))
-		b.WriteString("` |\n")
-		b.WriteString("|:---|---:|\n")
-		b.WriteString("| Steam ID | `")
-		b.WriteString(removeBackticks(playerData.ID.SteamID))
-		b.WriteString("` |\n")
-		b.WriteString("| GUID | `")
-		b.WriteString(removeBackticks(playerData.ID.GUID))
-		b.WriteString("` |\n\n")
+		bw("| 👤 Nickname  | `", removeBackticks(p.ID.Name), "` |\n")
+		bw("|:-------------|---:|\n")
+		bw("| 🎮 Steam ID  | `", removeBackticks(p.ID.SteamID), "` |\n")
+		bw("| 🆔 GUID      | `", removeBackticks(p.ID.GUID), "` |\n")
+		bw("| 👧🏻 Character | ", p.Character.Type, " ("+p.Character.Gender+") |\n")
+		avgPing := int(math.Round(float64(p.Network.Ping.Min+p.Network.Ping.Max) / 2))    //nolint:mnd
+		bw("| 🌐 Ping | ", warnIf(avgPing > 200), " ", strconv.Itoa(avgPing), " ms |\n\n") //nolint:mnd
 
-		b.WriteString("| Character type | ")
-		b.WriteString(playerData.Character.Type)
-		b.WriteString(" |\n")
-		b.WriteString("|:---|---:|\n")
-		b.WriteString("| Gender | ")
-		b.WriteString(playerData.Character.Gender)
-		b.WriteString(" |\n")
-		b.WriteString("| Blood type | ")
-		b.WriteString(playerData.Character.BloodType)
-		b.WriteString(" |\n\n")
+		bw("| ❤️ Health | ", warnIf(p.Vitals.Health < 0.5), floatToPercentStr(p.Vitals.Health), "% |\n") //nolint:mnd
+		bw("|:---|---:|\n")
+		bw("| 🩸 Blood (", p.Character.BloodType, ") | ", floatToPercentStr(p.Vitals.Blood), "% |\n")
+		bw(
+			"| 🩹 Blood Loss | ",
+			warnIf(p.State.BleedingSources > 0),
+			trnry(p.State.BleedingSources > 0, "Ongoing", "None"),
+			" |\n",
+		)
+		bw(
+			"| 💧 Water / 🍏 Food | ",
+			warnIf(p.Vitals.Water < 0.2 || p.Vitals.Energy < 0.2),
+			floatToPercentStr(p.Vitals.Water), "% / ",
+			floatToPercentStr(p.Vitals.Energy), "%",
+			" |\n",
+		)
+		bw("| 💦 Wetness | ", fmt.Sprintf("%.0f", p.Vitals.Wetness), "% |\n")
+		bw(
+			"| 🧠 Consciousness | (",
+			warnIf(p.State.IsUnconscious),
+			trnry(p.State.IsUnconscious, "unconscious", "in conscious"), ") ",
+			floatToPercentStr(p.Vitals.Shock), "%",
+			" |\n",
+		)
+		bw("| ☣️ Toxicity | ", floatToPercentStr(p.Vitals.Toxicity), "% |\n")
+		bw("| 🦠 Pathogens | ", strconv.Itoa(p.State.AgentsActive), "% |\n")
+		bw("| 💊 Immunity boosted | ", trnry(p.State.ImmunityBoosted, "Yes", "No"), " |\n")
+		bw("| 🌡️ Body temperature | ", floatToIntStr(p.Vitals.TemperatureCelsius), " °C", " |\n")
+		bw("| 🎒 Carried weight | ", floatRound2ToStr(p.WeightGrams/1000), " kg |\n") //nolint:mnd
+		bw("| 🔗 Handcuffed | ", trnry(p.State.IsRestrained, "Yes", "No"), " |\n\n")
 
-		b.WriteString("| ❤️ Health | ")
-		if playerData.Vitals.Health < 0.5 { //nolint:mnd
-			b.WriteString("⚠️ ")
-		}
-		b.WriteString(floatToPercentStr(playerData.Vitals.Health))
-		b.WriteString("% |\n")
-		b.WriteString("|:---|---:|\n")
-		b.WriteString("| 💧 Water | ")
-		if playerData.Vitals.Water < 0.2 { //nolint:mnd
-			b.WriteString("⚠️ ")
-		}
-		b.WriteString(floatToPercentStr(playerData.Vitals.Water))
-		b.WriteString("% |\n")
-		b.WriteString("| 🍏 Food | ")
-		if playerData.Vitals.Energy < 0.2 { //nolint:mnd
-			b.WriteString("⚠️ ")
-		}
-		b.WriteString(floatToPercentStr(playerData.Vitals.Energy))
-		b.WriteString("% |\n")
-		b.WriteString("| 🩸 Blood | ")
-		b.WriteString(floatToPercentStr(playerData.Vitals.Blood))
-		b.WriteString("% |\n")
-		b.WriteString("| Bleeding status | ")
-		if playerData.State.BleedingSources > 0 {
-			b.WriteString("⚠️ Bleeding is present")
-		} else {
-			b.WriteString("No bleeding")
-		}
-		b.WriteString(" |\n")
-		b.WriteString("| ⚡ Shock | ")
-		b.WriteString(floatToPercentStr(playerData.Vitals.Shock))
-		b.WriteString("% |\n")
-		b.WriteString("| ☣️ Toxicity | ")
-		b.WriteString(floatToPercentStr(playerData.Vitals.Toxicity))
-		b.WriteString("% |\n")
-		b.WriteString("| 🦠 Pathogens | ")
-		b.WriteString(strconv.Itoa(playerData.State.AgentsActive))
-		b.WriteString("% |\n")
-		b.WriteString("| 💊 Immunity boosted | ")
-		if playerData.State.ImmunityBoosted {
-			b.WriteString("Yes")
-		} else {
-			b.WriteString("No")
-		}
-		b.WriteString(" |\n")
-		b.WriteString("| 💦 Wetness | ")
-		b.WriteString(fmt.Sprintf("%.0f", playerData.Vitals.Wetness))
-		b.WriteString("% |\n")
-		b.WriteString("| 🌡️ Body temperature | ")
-		b.WriteString(fmt.Sprintf("%.2f °C", playerData.Vitals.TemperatureCelsius))
-		b.WriteString(" |\n")
-		b.WriteString("| ⚖️ Carried weight | ")
-		b.WriteString(fmt.Sprintf("%.2f kg", playerData.WeightGrams/1000)) //nolint:mnd
-		b.WriteString(" |\n")
-		b.WriteString("| In conscious | ")
-		if playerData.State.IsUnconscious {
-			b.WriteString("⚠️ Yes")
-		} else {
-			b.WriteString("No")
-		}
-		b.WriteString(" |\n")
-		b.WriteString("| Handcuffed | ")
-		if playerData.State.IsRestrained {
-			b.WriteString("⚠️ Yes")
-		} else {
-			b.WriteString("No")
-		}
-		b.WriteString(" |\n\n")
+		xStr, yStr := floatRound2ToStr(p.Pos.X), floatRound2ToStr(p.Pos.Y)
+		bw(
+			"| 🗺️ Coordinates | [",
+			xStr, " / ", yStr, "](https://dayz.xam.nu/"+world.MapName+"#location=", xStr, ";", yStr, ";4)",
+			" |\n",
+		)
+		bw("|:--------------|---:|\n")
+		bw("| 📍 Altitude / Direction | ", floatRound2ToStr(p.Pos.Alt), " m / ", floatRound2ToStr(p.Pos.Angle), " ° |\n\n")
 
-		b.WriteString("| Coordinates | ")
-		b.WriteString(fmt.Sprintf("x:%.2f, y:%.2f", playerData.Pos.X, playerData.Pos.Y))
-		b.WriteString(" |\n")
-		b.WriteString("|:---|---:|\n")
-		b.WriteString("| Altitude | ")
-		b.WriteString(fmt.Sprintf("%.2f m", playerData.Pos.Alt))
-		b.WriteString(" |\n")
-		b.WriteString("| Direction | ")
-		b.WriteString(fmt.Sprintf("%.2f °", playerData.Pos.Angle))
-		b.WriteString(" |\n\n")
-
-		b.WriteString("| Average ping | ")
-		avgPing := int(math.Round(float64(playerData.Network.Ping.Min+playerData.Network.Ping.Max) / 2))
-		if avgPing > 200 { //nolint:mnd
-			b.WriteString("⚠️ ")
-		}
-		b.WriteString(strconv.Itoa(avgPing))
-		b.WriteString(" ms |\n")
-		b.WriteString("|:---|---:|\n")
-		b.WriteString("| Minimum ping | ")
-		b.WriteString(strconv.Itoa(playerData.Network.Ping.Min))
-		b.WriteString(" ms |\n")
-		b.WriteString("| Maximum ping | ")
-		b.WriteString(strconv.Itoa(playerData.Network.Ping.Max))
-		b.WriteString(" ms |\n\n")
-
-		b.WriteString("| Total playtime | ")
-		b.WriteString(strconv.Itoa(secondsToHours(playerData.Stats.PlaytimeSeconds)))
-		b.WriteRune(' ')
-		b.WriteString(plural(secondsToHours(playerData.Stats.PlaytimeSeconds), "hour", "hours"))
-		b.WriteString(" |\n")
-		b.WriteString("|:---|---:|\n")
-		b.WriteString("| Distance traveled | ")
-		b.WriteString(fmt.Sprintf("%.2f km", playerData.Stats.DistanceMeters/1000)) //nolint:mnd
-		b.WriteString(" |\n")
-		b.WriteString("| Longest hit | ")
-		b.WriteString(fmt.Sprintf("%.2f m", playerData.Stats.LongestHitMeters))
-		b.WriteString(" |\n")
-		b.WriteString("| Players killed | ")
-		if playerData.Stats.PlayersKilled > 0 {
-			b.WriteString("⚠️ ")
-		}
-		b.WriteString(strconv.Itoa(playerData.Stats.PlayersKilled))
-		b.WriteString(" |\n")
-		b.WriteString("| Infected killed | ")
-		b.WriteString(strconv.Itoa(playerData.Stats.InfectedKilled))
-		b.WriteString(" |\n\n")
+		playtime := secondsToHours(p.Stats.PlaytimeSeconds)
+		bw(
+			"| 📅 Total playtime | ",
+			warnIf(playtime < 1), strconv.Itoa(playtime), " ", plural(playtime, "hour", "hours"),
+			" |\n",
+		)
+		bw("|:-----------------|---:|\n")
+		bw("| 🥾 Distance traveled | ", floatRound2ToStr(p.Stats.DistanceMeters/1000), " km |\n") //nolint:mnd
+		bw("| 🎯 Longest hit | ", floatRound2ToStr(p.Stats.LongestHitMeters), " m |\n")
+		bw("| 🪖 Players killed | ", warnIf(p.Stats.PlayersKilled > 0), strconv.Itoa(p.Stats.PlayersKilled), " |\n")
+		bw("| 🧟 Infected killed | ", strconv.Itoa(p.Stats.InfectedKilled), " |\n\n")
 
 		var media []tele.InputRichMessageMedia
 
 		if gameMap, gmErr := getMapByName(world.MapName); gmErr == nil && gameMap != nil {
 			if img, imgErr := gamemap.DrawPoint(gameMap, gamemap.Point{
-				PosX:        playerData.Pos.X,
-				PosY:        playerData.Pos.Y,
-				TopLabel:    playerData.ID.Name,
-				BottomLabel: fmt.Sprintf("[%.2f, %.2f]", playerData.Pos.X, playerData.Pos.Y),
+				PosX:        p.Pos.X,
+				PosY:        p.Pos.Y,
+				TopLabel:    p.ID.Name,
+				BottomLabel: fmt.Sprintf("[%.2f, %.2f]", p.Pos.X, p.Pos.Y),
 			}, gamemap.WithPointsOfInterest(true)); imgErr == nil {
 				pr, pw := io.Pipe()
 				defer func() { _ = pr.Close() }() //nolint:errcheck

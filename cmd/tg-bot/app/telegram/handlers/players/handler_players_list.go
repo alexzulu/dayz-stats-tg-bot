@@ -58,7 +58,15 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 		b.WriteString("|:--------:|:---:|:---:|:---:|:---:|:--------------:|:-----:|\n")
 
 		for _, p := range *players {
-			names, namesToIDs[p.ID.Name] = append(names, p.ID.Name), p.ID.SteamID
+			if p.ID.Name == "" {
+				continue
+			}
+
+			names = append(names, p.ID.Name)
+
+			if p.ID.SteamID != "" {
+				namesToIDs[p.ID.Name] = p.ID.SteamID
+			}
 
 			b.WriteRune('`')
 			b.WriteString(removeBackticks(p.ID.Name))
@@ -104,6 +112,10 @@ func NewServerPlayersListBtnHandler(ctx context.Context, cf *config.File, cp *cl
 		)
 
 		for _, name := range names {
+			if namesToIDs[name] == "" {
+				continue
+			}
+
 			// payload (callback_data) will contain `<server_name>|<player_steam_id>`
 			buttons = append(buttons, markup.Data("👤 "+name, ServerPlayerBtn.Unique, serverName, namesToIDs[name]))
 		}
