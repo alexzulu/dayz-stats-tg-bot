@@ -21,3 +21,12 @@ func bw(b *strings.Builder, parts ...string) {
 		b.WriteString(p)
 	}
 }
+
+// warnIf returns a warning glyph when condition holds, otherwise an empty string.
+func warnIf(condition bool) string {
+	if condition {
+		return " ⚠️ "
+	}
+
+	return ""
+}

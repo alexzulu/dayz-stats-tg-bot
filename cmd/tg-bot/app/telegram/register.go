@@ -63,7 +63,7 @@ func RegisterHandlers(
 			{
 				Text:        "vehicles",
 				Description: "List vehicles on a server",
-				Handler:     vehicles.NewSelectServerHandler(cf),
+				Handler:     vehicles.NewSelectServerHandler(ctx, log, cf, cp),
 				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
 		},

@@ -3,7 +3,7 @@ module github.com/alexzulu/dayz-stats-tg-bot
 go 1.27
 
 require (
-	gh.tarampamp.am/dayz-statez/server v0.0.2
+	gh.tarampamp.am/dayz-statez/server v0.0.3
 	golang.org/x/image v0.48.0
 	gopkg.in/telebot.v4 v4.0.0
 )

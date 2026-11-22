@@ -81,26 +81,37 @@ func NewServerVehiclesListBtnHandler( //nolint:funlen
 		type tableRow struct{ total, free int }
 
 		var (
-			mapPoints      = make([]gamemap.Point, 0, len(*vehicles))
-			tableData      = make(map[string]*tableRow) // map[className]data
-			occupiedHashes = statez.OccupiedHashes(*vehicles)
+			mapPoints = make([]gamemap.Point, 0, len(*vehicles))
+			tableData = make(map[string]*tableRow) // map[className]data
 		)
 
 		for i := range *vehicles {
 			v := (*vehicles)[i]
-			label, color, _ := friendlyNameAndColor(v.Class.Name)
-			isOccupied := slices.Contains(occupiedHashes, v.Hash)
+
+			var (
+				label, color, _ = friendlyNameAndColor(v.Class.Name)
+				name            = iff(label != "", label, v.Class.Name)
+				isOccupied      = statez.IsVehicleOccupied(v)
+
+				classType    = strings.ToLower(strings.TrimSpace(v.Class.Type))
+				isBoat       = strings.Contains(classType, "boat")
+				isMoto       = strings.Contains(classType, "motorbike")
+				isMotoOrBoat = isBoat || isMoto
+			)
 
 			mapPoints = append(mapPoints, gamemap.Point{
-				PosX:        v.Pos.X,
-				PosY:        v.Pos.Y,
-				Color:       color,
-				TopLabel:    iff(label != "", label, v.Class.Name),
-				BottomLabel: iff(isOccupied, "", "Free"),
+				PosX:     v.Pos.X,
+				PosY:     v.Pos.Y,
+				Color:    color,
+				TopLabel: iff(isMotoOrBoat, "", name),
+				BottomLabel: iff(
+					isMotoOrBoat,
+					name+iff(isOccupied, "", iff(isBoat, "", " (free)")),
+					iff(isOccupied, "", "Free"),
+				),
 			})
 
-			classType := strings.ToLower(strings.TrimSpace(v.Class.Type))
-			if strings.Contains(classType, "boat") || strings.Contains(classType, "motorbike") {
+			if isMotoOrBoat {
 				continue // exclude boats/motobikes from the table, as they are not relevant for most players
 			}
 
