@@ -92,6 +92,11 @@ func RegisterHandlers(
 				Middleware: []tele.MiddlewareFunc{authMw},
 			},
 			{
+				Button:     &players.ServerPlayerRefreshBtn,
+				Handler:    players.NewServerPlayerBtnHandler(ctx, log, cf, cp),
+				Middleware: []tele.MiddlewareFunc{authMw},
+			},
+			{
 				Button:     &vehicles.ServerVehiclesListBtn,
 				Handler:    vehicles.NewServerVehiclesListBtnHandler(ctx, log, cf, cp),
 				Middleware: []tele.MiddlewareFunc{authMw},

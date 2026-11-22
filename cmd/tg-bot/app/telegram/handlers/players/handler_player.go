@@ -2,6 +2,7 @@ package players
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -25,10 +26,16 @@ import (
 
 // ServerPlayerBtn is the inline button for a single player's details; its callback payload is
 // "<server_name>|<player_steam_id>".
-var ServerPlayerBtn = tele.Btn{Text: "Player details", Unique: "player"} //nolint:gochecknoglobals
+var ServerPlayerBtn = tele.Btn{Text: "Player details", Unique: "plyr"} //nolint:gochecknoglobals
 
-// NewServerPlayerBtnHandler returns the callback handler for ServerPlayerBtn. It renders one player's full
-// card (identity, vitals, position, lifetime stats) plus a map crop pinning their current position.
+// ServerPlayerRefreshBtn re-runs the player card in place (edits the message) instead of sending a new one.
+// Same payload as [ServerPlayerBtn]; the short Unique keeps callback_data within 64 bytes even with a
+// 32-byte server name and a 17-digit steam id.
+var ServerPlayerRefreshBtn = tele.Btn{Text: "Refresh player info", Unique: "plyr-ref"} //nolint:gochecknoglobals
+
+// NewServerPlayerBtnHandler returns the callback handler for ServerPlayerBtn and ServerPlayerRefreshBtn. It
+// renders one player's full card (identity, vitals, position, lifetime stats) plus a map crop pinning their
+// current position. A refresh tap edits the card in place.
 func NewServerPlayerBtnHandler( //nolint:funlen
 	ctx context.Context,
 	log *slog.Logger,
@@ -203,6 +210,29 @@ func NewServerPlayerBtnHandler( //nolint:funlen
 			}
 		}
 
-		return c.Send(&tele.InputRichMessage{Markdown: b.String(), Media: media})
+		// refresh button re-runs this flow; its tap edits the card in place (see the Edit branch below)
+		var markup tele.ReplyMarkup
+
+		markup.Inline(markup.Row(markup.Data(
+			"🔄 Refresh", ServerPlayerRefreshBtn.Unique, serverName, playerSteamID,
+		)))
+
+		msg := &tele.InputRichMessage{Markdown: b.String(), Media: media}
+
+		// refresh taps edit the existing card (the initial drill-down from the list sends a new message)
+		if cb := c.Callback(); cb != nil && cb.Unique == ServerPlayerRefreshBtn.Unique {
+			if err := c.Edit(msg, &markup); err != nil {
+				// telegram rejects an edit when nothing changed (unmoved player, or a cached daemon snapshot)
+				if errors.Is(err, tele.ErrSameMessageContent) || errors.Is(err, tele.ErrMessageNotModified) {
+					return nil
+				}
+
+				return err
+			}
+
+			return nil
+		}
+
+		return c.Send(msg, &markup)
 	}
 }
