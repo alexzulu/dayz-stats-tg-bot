@@ -13,7 +13,7 @@ func fixed(f float64, decimals int) string { return strconv.FormatFloat(f, 'f', 
 func percent(ratio float64) string { return fixed(ratio*100, 0) } //nolint:mnd
 
 // secondsToHours rounds a duration in seconds to whole hours.
-func secondsToHours(seconds float64) int { return int(math.Round(seconds / 3600)) } //nolint:mnd
+func secondsToHours[T int | float64](seconds T) int { return int(math.Round(float64(seconds) / 3600)) } //nolint:mnd
 
 // plural returns one when n == 1, otherwise many.
 func plural[T int | float64](n T, one, many string) string {

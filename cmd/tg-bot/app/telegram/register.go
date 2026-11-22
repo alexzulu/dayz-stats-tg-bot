@@ -57,7 +57,7 @@ func RegisterHandlers(
 			{
 				Text:        "players",
 				Description: "List players online",
-				Handler:     players.NewSelectServerHandler(cf),
+				Handler:     players.NewSelectServerHandler(ctx, log, cf, cp),
 				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
 			{
