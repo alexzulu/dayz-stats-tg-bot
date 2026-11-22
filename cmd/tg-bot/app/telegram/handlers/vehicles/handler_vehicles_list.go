@@ -99,8 +99,9 @@ func NewServerVehiclesListBtnHandler( //nolint:funlen
 				BottomLabel: iff(isOccupied, "", "Free"),
 			})
 
-			if strings.Contains(strings.ToLower(v.Class.Type), "boat") {
-				continue // exclude boats from the table, as they are not relevant for most players
+			classType := strings.ToLower(strings.TrimSpace(v.Class.Type))
+			if strings.Contains(classType, "boat") || strings.Contains(classType, "motorbike") {
+				continue // exclude boats/motobikes from the table, as they are not relevant for most players
 			}
 
 			if row, ok := tableData[label]; ok {
