@@ -65,7 +65,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		&cfgPath,
 		"config-file",
 		envOrStr(envConfigFilePath, filepath.Join(config.DefaultDirPath(), "dayz-stats-tg-bot.json")),
-		"Path to the configuration file [$"+envConfigFilePath.String()+"]",
+		"Path to the configuration file (you DON'T need to create it manually, the app will create it and store "+
+			"its settings there) [$"+envConfigFilePath.String()+"]",
 	)
 
 	// parse the command-line arguments

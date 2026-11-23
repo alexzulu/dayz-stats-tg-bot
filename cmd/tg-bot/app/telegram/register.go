@@ -7,6 +7,7 @@ import (
 	tele "gopkg.in/telebot.v4"
 
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
+	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/bind"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/ping"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/players"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/servers"
@@ -18,7 +19,7 @@ import (
 
 // RegisterHandlers wires every command and inline-button handler onto the bot, gating admin actions behind the
 // auth middleware (ping stays public). It does not start polling - call bot.Start for that.
-func RegisterHandlers(
+func RegisterHandlers( //nolint:funlen // flat wiring of the command and button registries
 	ctx context.Context,
 	log *slog.Logger,
 	cf *config.File,
@@ -31,6 +32,11 @@ func RegisterHandlers(
 		authMw    = middleware.NewAuthMiddleware(ctx, log, tgAdminIDs)
 		cp        = clients.NewPool(0) // 0 ttl - the pool falls back to the client's default cache window
 	)
+
+	me, err := b.Me()
+	if err != nil {
+		return err
+	}
 
 	const cmdAddServer = "add_server"
 
@@ -66,6 +72,12 @@ func RegisterHandlers(
 				Handler:     vehicles.NewSelectServerHandler(ctx, log, cf, cp),
 				Middleware:  []tele.MiddlewareFunc{authMw},
 			},
+			{
+				Text:        "bind",
+				Description: "Bind a self-updating server status message to a group/thread",
+				Handler:     bind.NewBindHandler(log, cf, tgAdminIDs, me),
+				AllChats:    true, // fires in groups too; auth is enforced inside (silent for non-admins there)
+			},
 		},
 		recoverMw,
 		loggerMw,
@@ -100,6 +112,11 @@ func RegisterHandlers(
 				Button:     &vehicles.ServerVehiclesListBtn,
 				Handler:    vehicles.NewServerVehiclesListBtnHandler(ctx, log, cf, cp),
 				Middleware: []tele.MiddlewareFunc{authMw},
+			},
+			{
+				Button:   &bind.BindServerBtn,
+				Handler:  bind.NewBindServerBtnHandler(log, cf, tgAdminIDs),
+				AllChats: true, // the picker lives in a group; auth is enforced inside (silent for non-admins)
 			},
 		},
 		recoverMw,

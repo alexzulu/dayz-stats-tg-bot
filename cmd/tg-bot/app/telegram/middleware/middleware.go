@@ -8,6 +8,8 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 	mw "gopkg.in/telebot.v4/middleware"
+
+	tt "github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/tools"
 )
 
 // NewLoggerMiddleware returns a middleware that logs incoming messages with structured logging.
@@ -38,7 +40,7 @@ func NewAuthMiddleware(ctx context.Context, log *slog.Logger, adminIDs []int64) 
 		return func(c tele.Context) error {
 			sender := c.Sender()
 			if sender == nil {
-				return c.Send("Unauthorized: no sender information")
+				return tt.SendRichMarkdownError(c, "Unauthorized: no sender information", nil)
 			}
 
 			if slices.Contains(adminIDs, sender.ID) {
@@ -47,7 +49,7 @@ func NewAuthMiddleware(ctx context.Context, log *slog.Logger, adminIDs []int64) 
 
 			log.LogAttrs(ctx, slog.LevelWarn, "Unauthorized access attempt", loggerFieldsFromTgContext(c)...)
 
-			return c.Send("Unauthorized: you are not an admin")
+			return tt.SendRichMarkdownError(c, "Unauthorized: you are not an admin", nil)
 		}
 	}
 }

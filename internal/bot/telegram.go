@@ -89,6 +89,7 @@ type Command struct {
 	Description string
 	Handler     telebot.HandlerFunc
 	Middleware  []telebot.MiddlewareFunc
+	AllChats    bool // when true the handler fires in every chat type, not just private chats
 }
 
 // RegisterPrivateCommands wires each command's handler and advertises the set, so clients show them under the
@@ -124,15 +125,20 @@ func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot
 			Description: cmd.Description,
 		})
 
-		bot.Handle(
-			"/"+trigger, // telebot routes on "/cmd"; text is bare, so prepend slash
-			func(c telebot.Context) error {
+		handler := cmd.Handler
+		if !cmd.AllChats {
+			handler = func(c telebot.Context) error {
 				if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
 					return cmd.Handler(c)
 				}
 
 				return nil
-			},
+			}
+		}
+
+		bot.Handle(
+			"/"+trigger, // telebot routes on "/cmd"; text is bare, so prepend slash
+			handler,
 			append(slices.Clone(globMw), cmd.Middleware...)...,
 		)
 	}
@@ -149,38 +155,12 @@ func (t *Telegram) RegisterPrivateCommands(commands []Command, globMw ...telebot
 	return nil
 }
 
-// RegisterPrivateTextHandler wires a handler for all text messages in private chats.
-//
-// NOTE: You need to call Start to start the polling loop after registering handlers.
-func (t *Telegram) RegisterPrivateTextHandler(h telebot.HandlerFunc, m ...telebot.MiddlewareFunc) error {
-	if h == nil {
-		return nil // no-op
-	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	bot, bErr := t.bot()
-	if bErr != nil {
-		return bErr
-	}
-
-	bot.Handle(telebot.OnText, func(c telebot.Context) error {
-		if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
-			return h(c)
-		}
-
-		return nil
-	}, m...)
-
-	return nil
-}
-
 // Button is a Telegram callback button with its handler and optional middleware.
 type Button struct {
 	Button     telebot.CallbackEndpoint
 	Handler    telebot.HandlerFunc
 	Middleware []telebot.MiddlewareFunc
+	AllChats   bool // when true the handler fires in every chat type, not just private chats
 }
 
 // RegisterPrivateButtonHandlers wires each button's handler. Handlers fire only in private chats.
@@ -206,13 +186,18 @@ func (t *Telegram) RegisterPrivateButtonHandlers(btns []Button, globMw ...telebo
 			continue
 		}
 
-		bot.Handle(btn.Button, func(c telebot.Context) error {
-			if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
-				return btn.Handler(c)
-			}
+		handler := btn.Handler
+		if !btn.AllChats {
+			handler = func(c telebot.Context) error {
+				if chat := c.Chat(); chat != nil && chat.Type == telebot.ChatPrivate {
+					return btn.Handler(c)
+				}
 
-			return nil
-		}, append(slices.Clone(globMw), btn.Middleware...)...)
+				return nil
+			}
+		}
+
+		bot.Handle(btn.Button, handler, append(slices.Clone(globMw), btn.Middleware...)...)
 	}
 
 	return nil
@@ -237,6 +222,16 @@ func (t *Telegram) Start() error {
 	t.started = true
 
 	return nil
+}
+
+// Me returns the bot's own user (its ID and username), initializing the bot if necessary.
+func (t *Telegram) Me() (*telebot.User, error) {
+	bot, err := t.botWithLock()
+	if err != nil {
+		return nil, err
+	}
+
+	return bot.Me, nil
 }
 
 // Ping verifies Telegram API reachability and bot token.

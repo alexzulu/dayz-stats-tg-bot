@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 )
 
@@ -20,13 +21,22 @@ type (
 	//
 	// NOTE: when adding map or slice fields, deep-copy them in the Config() method to avoid data races.
 	Config struct {
-		Servers map[string]ConfigServer `json:"servers"` // server name (alias) -> server config
+		Servers            map[string]ConfigServer   `json:"servers"`              // server name (alias) -> server config
+		LiveStatusMessages []ConfigLiveStatusMessage `json:"live_status_messages"` // bound self-updating status messages
 	}
 
 	// ConfigServer holds the configuration for a single DayZ server with StateZ daemon installed.
 	ConfigServer struct {
 		BaseUrl   string `json:"base_url"`
 		AuthToken string `json:"auth_token"`
+	}
+
+	// ConfigLiveStatusMessage binds a self-updating server-status message to a chat (optionally a forum thread).
+	ConfigLiveStatusMessage struct {
+		ChatID     int64  `json:"chat_id"`
+		ThreadID   int    `json:"thread_id,omitempty"` // 0 when not a forum thread
+		MessageID  int    `json:"message_id"`
+		ServerName string `json:"server_name"`
 	}
 )
 
@@ -74,6 +84,9 @@ func (f *File) Config() Config {
 
 	cfg.Servers = make(map[string]ConfigServer, len(f.cfg.Servers))
 	maps.Copy(cfg.Servers, f.cfg.Servers)
+
+	// struct elems have no reference fields, so a plain clone is a deep copy
+	cfg.LiveStatusMessages = slices.Clone(f.cfg.LiveStatusMessages)
 
 	return cfg
 }

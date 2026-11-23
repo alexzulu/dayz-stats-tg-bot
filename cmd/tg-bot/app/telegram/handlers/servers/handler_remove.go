@@ -29,6 +29,7 @@ func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Po
 		var (
 			found        bool
 			serverConfig config.ConfigServer
+			removedLive  []config.ConfigLiveStatusMessage // live-status bindings dropped with the server, kept for rollback
 		)
 
 		// delete under the lock, keeping the old config so Save failure can be rolled back
@@ -39,6 +40,19 @@ func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Po
 			}
 
 			delete(cfg.Servers, serverName)
+
+			// drop any live-status messages bound to the removed server
+			var kept []config.ConfigLiveStatusMessage
+
+			for _, m := range cfg.LiveStatusMessages {
+				if m.ServerName == serverName {
+					removedLive = append(removedLive, m)
+				} else {
+					kept = append(kept, m)
+				}
+			}
+
+			cfg.LiveStatusMessages = kept
 		})
 
 		if !found {
@@ -47,7 +61,10 @@ func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Po
 
 		if err := cf.Save(); err != nil {
 			// restore in-memory config to match disk
-			cf.Update(func(cfg *config.Config) { cfg.Servers[serverName] = serverConfig })
+			cf.Update(func(cfg *config.Config) {
+				cfg.Servers[serverName] = serverConfig
+				cfg.LiveStatusMessages = append(cfg.LiveStatusMessages, removedLive...)
+			})
 
 			log.Error("failed to save config after removing server",
 				slog.String("error", err.Error()),
