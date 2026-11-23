@@ -83,6 +83,10 @@ func (t *Telegram) botWithLock() (*telebot.Bot, error) {
 	return t.bot()
 }
 
+// Bot returns the [telebot.Bot] instance, initializing it if necessary.
+// Do not store the returned pointer for later use, as it may be replaced on a restart.
+func (t *Telegram) Bot() (*telebot.Bot, error) { return t.botWithLock() }
+
 // Command is a Telegram command with its handler, name, description, and optional middleware.
 type Command struct {
 	Text        string
@@ -222,16 +226,6 @@ func (t *Telegram) Start() error {
 	t.started = true
 
 	return nil
-}
-
-// Me returns the bot's own user (its ID and username), initializing the bot if necessary.
-func (t *Telegram) Me() (*telebot.User, error) {
-	bot, err := t.botWithLock()
-	if err != nil {
-		return nil, err
-	}
-
-	return bot.Me, nil
 }
 
 // Ping verifies Telegram API reachability and bot token.

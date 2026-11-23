@@ -41,7 +41,6 @@ func NewBindServerBtnHandler(log *slog.Logger, cf *config.File, adminIDs []int64
 
 		entry := config.ConfigLiveStatusMessage{
 			ChatID:     msg.Chat.ID,
-			ThreadID:   msg.ThreadID,
 			MessageID:  msg.ID,
 			ServerName: serverName,
 		}
@@ -51,14 +50,10 @@ func NewBindServerBtnHandler(log *slog.Logger, cf *config.File, adminIDs []int64
 		})
 
 		if err := cf.Save(); err != nil {
-			// roll back the just-appended binding (last element equal to entry) so memory matches disk
+			// roll back the just-appended binding so memory matches disk (equal entries are interchangeable)
 			cf.Update(func(cfg *config.Config) {
-				for i, m := range slices.Backward(cfg.LiveStatusMessages) {
-					if m == entry {
-						cfg.LiveStatusMessages = slices.Delete(cfg.LiveStatusMessages, i, i+1)
-
-						break
-					}
+				if i := slices.Index(cfg.LiveStatusMessages, entry); i >= 0 {
+					cfg.LiveStatusMessages = slices.Delete(cfg.LiveStatusMessages, i, i+1)
 				}
 			})
 

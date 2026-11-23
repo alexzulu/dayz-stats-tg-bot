@@ -58,13 +58,10 @@ func (cs *cacheSlot[T]) Set(v *T) {
 	cs.mu.Unlock()
 }
 
-// NewCachedClient builds a client against baseURL authenticated with authToken. A non-positive cacheTTL falls back
-// to defaultCacheTTL.
+// NewCachedClient builds a client against baseURL authenticated with authToken.
 func NewCachedClient(baseURL, authToken string, cacheTTL time.Duration, opts ...api.ClientOption) *CachedClient {
-	const defaultCacheTTL = 2 * time.Second
-
-	if cacheTTL <= 0 {
-		cacheTTL = defaultCacheTTL
+	if cacheTTL < 0 {
+		cacheTTL = time.Duration(0)
 	}
 
 	return &CachedClient{

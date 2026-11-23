@@ -12,7 +12,6 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
 	tt "github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/tools"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
@@ -24,7 +23,7 @@ func NewSelectServerHandler( //nolint:gocognit,funlen
 	ctx context.Context,
 	log *slog.Logger,
 	cf *config.File,
-	cp *clients.Pool,
+	cp *statez.CachedClientPool,
 ) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		cfg := cf.Config()

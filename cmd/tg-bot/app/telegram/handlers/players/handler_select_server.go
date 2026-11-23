@@ -14,9 +14,9 @@ import (
 	"gh.tarampamp.am/dayz-statez/server/pkg/api"
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
 	tt "github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/tools"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
 
 // NewSelectServerHandler returns the /players handler - a per-server summary table (map, players, in-game time,
@@ -26,7 +26,7 @@ func NewSelectServerHandler(
 	ctx context.Context,
 	log *slog.Logger,
 	cf *config.File,
-	cp *clients.Pool,
+	cp *statez.CachedClientPool,
 ) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		cfg := cf.Config()

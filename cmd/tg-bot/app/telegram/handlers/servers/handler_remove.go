@@ -3,13 +3,14 @@ package servers
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
 	tt "github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/tools"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/validate"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
 
 // RemoveServerBtn is the inline "Remove" button rendered by /servers; its callback payload is the name of the
@@ -18,7 +19,7 @@ var RemoveServerBtn = tele.Btn{Text: "Remove server", Unique: "delsrv"} //nolint
 
 // NewRemoveServerBtnHandler returns the callback handler for RemoveServerBtn. It removes the server named in the
 // payload.
-func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Pool) tele.HandlerFunc {
+func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *statez.CachedClientPool) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		serverName := c.Data() // received from [RemoveServerBtn] button via `callback_data`
 
@@ -41,18 +42,16 @@ func NewRemoveServerBtnHandler(log *slog.Logger, cf *config.File, cp *clients.Po
 
 			delete(cfg.Servers, serverName)
 
-			// drop any live-status messages bound to the removed server
-			var kept []config.ConfigLiveStatusMessage
-
-			for _, m := range cfg.LiveStatusMessages {
-				if m.ServerName == serverName {
-					removedLive = append(removedLive, m)
-				} else {
-					kept = append(kept, m)
+			// drop live-status messages bound to the removed server, keeping them for a possible rollback
+			cfg.LiveStatusMessages = slices.DeleteFunc(cfg.LiveStatusMessages, func(m config.ConfigLiveStatusMessage) bool {
+				if m.ServerName != serverName {
+					return false
 				}
-			}
 
-			cfg.LiveStatusMessages = kept
+				removedLive = append(removedLive, m)
+
+				return true
+			})
 		})
 
 		if !found {

@@ -6,7 +6,6 @@ import (
 
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/bind"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/ping"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/handlers/players"
@@ -15,6 +14,7 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/middleware"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
 
 // RegisterHandlers wires every command and inline-button handler onto the bot, gating admin actions behind the
@@ -24,18 +24,18 @@ func RegisterHandlers( //nolint:funlen // flat wiring of the command and button 
 	log *slog.Logger,
 	cf *config.File,
 	b *bot.Telegram,
+	cp *statez.CachedClientPool,
 	tgAdminIDs []int64,
 ) error {
 	var (
 		recoverMw = middleware.NewRecoverMiddleware(ctx, log)
 		loggerMw  = middleware.NewLoggerMiddleware(ctx, log)
 		authMw    = middleware.NewAuthMiddleware(ctx, log, tgAdminIDs)
-		cp        = clients.NewPool(0) // 0 ttl - the pool falls back to the client's default cache window
 	)
 
-	me, err := b.Me()
-	if err != nil {
-		return err
+	tb, bErr := b.Bot()
+	if bErr != nil {
+		return bErr
 	}
 
 	const cmdAddServer = "add_server"
@@ -75,7 +75,7 @@ func RegisterHandlers( //nolint:funlen // flat wiring of the command and button 
 			{
 				Text:        "bind",
 				Description: "Bind a self-updating server status message to a group/thread",
-				Handler:     bind.NewBindHandler(log, cf, tgAdminIDs, me),
+				Handler:     bind.NewBindHandler(log, cf, tgAdminIDs, tb.Me),
 				AllChats:    true, // fires in groups too; auth is enforced inside (silent for non-admins there)
 			},
 		},

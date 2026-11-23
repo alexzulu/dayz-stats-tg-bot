@@ -31,10 +31,10 @@ type (
 		AuthToken string `json:"auth_token"`
 	}
 
-	// ConfigLiveStatusMessage binds a self-updating server-status message to a chat (optionally a forum thread).
+	// ConfigLiveStatusMessage binds a self-updating server-status message to a chat (or forum thread) - edits are
+	// addressed by chat+message ID, which is unique regardless of thread.
 	ConfigLiveStatusMessage struct {
 		ChatID     int64  `json:"chat_id"`
-		ThreadID   int    `json:"thread_id,omitempty"` // 0 when not a forum thread
 		MessageID  int    `json:"message_id"`
 		ServerName string `json:"server_name"`
 	}

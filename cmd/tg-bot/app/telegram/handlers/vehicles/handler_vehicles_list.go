@@ -17,7 +17,6 @@ import (
 	"gh.tarampamp.am/dayz-statez/server/pkg/api"
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
 	tt "github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/tools"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/validate"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
@@ -36,7 +35,7 @@ func NewServerVehiclesListBtnHandler( //nolint:funlen
 	ctx context.Context,
 	log *slog.Logger,
 	cf *config.File,
-	cp *clients.Pool,
+	cp *statez.CachedClientPool,
 ) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		serverName := c.Data() // received from [ServerVehiclesListBtn] button via `callback_data`

@@ -17,11 +17,11 @@ import (
 	"gh.tarampamp.am/dayz-statez/server/pkg/api"
 	tele "gopkg.in/telebot.v4"
 
-	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/clients"
 	tt "github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/tools"
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram/validate"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/gamemap"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
 
 // ServerPlayerBtn is the inline button for a single player's details; its callback payload is
@@ -40,7 +40,7 @@ func NewServerPlayerBtnHandler( //nolint:funlen
 	ctx context.Context,
 	log *slog.Logger,
 	cf *config.File,
-	cp *clients.Pool,
+	cp *statez.CachedClientPool,
 ) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		args := c.Args()

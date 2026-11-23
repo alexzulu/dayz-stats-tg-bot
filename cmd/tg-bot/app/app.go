@@ -14,6 +14,7 @@ import (
 	"github.com/alexzulu/dayz-stats-tg-bot/cmd/tg-bot/app/telegram"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/bot"
 	"github.com/alexzulu/dayz-stats-tg-bot/internal/config"
+	"github.com/alexzulu/dayz-stats-tg-bot/internal/statez"
 )
 
 // App is the main CLI application struct.
@@ -24,18 +25,20 @@ func NewApp(name string) *App { return &App{name: name} }
 
 const (
 	envUpdateInterval evnVar = "UPDATE_INTERVAL"
+	envCacheTTL       evnVar = "CACHE_TTL"
 	envTgBotToken     evnVar = "TG_BOT_TOKEN" //nolint:gosec // it's just a name of an env :D
 	envTgAdminIDs     evnVar = "TG_ADMIN_IDS"
 	envConfigFilePath evnVar = "CONFIG_FILE"
 )
 
 // Run executes the application with the provided context and command-line arguments.
-func (a *App) Run(ctx context.Context, args []string) error {
+func (a *App) Run(ctx context.Context, args []string) error { //nolint:funlen // linear startup wiring
 	var (
 		flags = flag.NewFlagSet(a.name, flag.ExitOnError)
 		log   = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 		updFreq       time.Duration
+		cacheTTL      time.Duration
 		tgBotTkn      string
 		tgAdminIDsStr string
 		cfgPath       string
@@ -46,7 +49,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		&updFreq,
 		"update-interval",
 		envOrDur(envUpdateInterval, 5*time.Second), //nolint:mnd
-		"Interval between updates [$"+envUpdateInterval.String()+"]",
+		"Interval between self-updating server status message updates [$"+envUpdateInterval.String()+"]",
+	)
+	flags.DurationVar(
+		&cacheTTL,
+		"cache-ttl",
+		envOrDur(envCacheTTL, 5*time.Second), //nolint:mnd
+		"Time-to-live for cached server data [$"+envCacheTTL.String()+"]",
 	)
 	flags.StringVar(
 		&tgBotTkn,
@@ -74,8 +83,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// normalize update interval (100ms <= updFreq <= 1h)
-	updFreq = max(100*time.Millisecond, min(updFreq, time.Hour)) //nolint:mnd
+	// normalize update interval / cache-ttl (100ms <= updFreq <= 1h)
+	updFreq = max(100*time.Millisecond, min(updFreq, time.Hour))   //nolint:mnd
+	cacheTTL = max(100*time.Millisecond, min(cacheTTL, time.Hour)) //nolint:mnd
 
 	// parse the Telegram admin IDs
 	tgAdminIDs := make([]int64, 0)
@@ -120,11 +130,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	log.Info("Initialization complete",
 		slog.String("update_interval", updFreq.String()),
+		slog.String("cache_ttl", cacheTTL.String()),
 		slog.Any("tg_admin_ids", tgAdminIDs),
 		slog.String("config_file", cfgPath),
 	)
 
-	if err := telegram.RegisterHandlers(ctx, tgLog, cfg, tgBot, tgAdminIDs); err != nil {
+	cp := statez.NewCachedClientPool(cacheTTL) // create clients pool to share StateZ clients
+
+	if err := telegram.RegisterHandlers(ctx, tgLog, cfg, tgBot, cp, tgAdminIDs); err != nil {
 		return fmt.Errorf("registering Telegram handlers: %w", err)
 	}
 
@@ -132,9 +145,19 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return fmt.Errorf("starting Telegram bot: %w", err)
 	}
 
+	updaterClosed := make(chan struct{})
+
+	// refresh bound live-status messages in the background until the context is canceled
+	go func() {
+		defer close(updaterClosed)
+
+		telegram.NewStatusUpdater(tgLog, tgBot, cfg, cp, updFreq).Run(ctx)
+	}()
+
 	defer func(t time.Time) { log.Info("Exiting", slog.String("uptime", time.Since(t).String())) }(time.Now())
 
 	<-ctx.Done()
+	<-updaterClosed
 
 	return nil
 }
