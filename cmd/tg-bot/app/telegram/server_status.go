@@ -122,7 +122,7 @@ func (u *StatusUpdater) Run(ctx context.Context) { //nolint:funlen
 				continue // server was removed
 			}
 
-			players, world, apiErr := u.fetchServerData(ctx, u.cp.Get(serverCfg))
+			players, world, vehicles, apiErr := u.fetchServerData(ctx, u.cp.Get(serverCfg))
 			if apiErr != nil {
 				u.log.Warn("server status updater: fetch failed",
 					slog.String("server", liveMsg.ServerName),
@@ -130,7 +130,7 @@ func (u *StatusUpdater) Run(ctx context.Context) { //nolint:funlen
 				)
 			}
 
-			switch editErr := u.updateStatusMessage(tbot, liveMsg, players, world, apiErr); {
+			switch editErr := u.updateStatusMessage(tbot, liveMsg, players, world, vehicles, apiErr); {
 			case editErr == nil, u.isNotModified(editErr):
 				// already up to date, nothing to do
 			case u.isMessageGone(editErr):
@@ -183,25 +183,28 @@ func (u *StatusUpdater) Run(ctx context.Context) { //nolint:funlen
 func (*StatusUpdater) fetchServerData(
 	ctx context.Context,
 	client *statez.CachedClient,
-) (*api.Players, *api.World, error) {
+) (*api.Players, *api.World, *api.Vehicles, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:mnd
 	defer cancel()
 
 	var (
 		wg sync.WaitGroup
 
-		players    *api.Players
-		playersErr error
-		world      *api.World
-		worldErr   error
+		players     *api.Players
+		playersErr  error
+		world       *api.World
+		worldErr    error
+		vehicles    *api.Vehicles
+		vehiclesErr error
 	)
 
 	wg.Go(func() { players, playersErr = client.Players(ctx) })
 	wg.Go(func() { world, worldErr = client.World(ctx) })
+	wg.Go(func() { vehicles, vehiclesErr = client.Vehicles(ctx) })
 
 	wg.Wait()
 
-	return players, world, cmp.Or(playersErr, worldErr)
+	return players, world, vehicles, cmp.Or(playersErr, worldErr, vehiclesErr)
 }
 
 // updateStatusMessage edits the bound message in place - the server state on success, an error notice when
@@ -213,6 +216,7 @@ func (*StatusUpdater) updateStatusMessage(
 	live config.ConfigLiveStatusMessage,
 	players *api.Players,
 	world *api.World,
+	vehicles *api.Vehicles,
 	apiErr error,
 ) error {
 	// StoredMessage lets us edit by chat+message ID without a tele.Context (we are off the update loop)
@@ -268,7 +272,34 @@ func (*StatusUpdater) updateStatusMessage(
 
 			b.WriteString(", ")
 			_, _ = fmt.Fprintf(&b, "%.1f °C", world.Weather.Temperature)
-			b.WriteString("\n")
+			b.WriteString("\\\n")
+		}
+
+		{ // vehicles
+			b.WriteString("🚗 **Машин на спавне**: ")
+
+			var freeCars, cars int
+
+			for _, v := range *vehicles {
+				var (
+					classType = strings.ToLower(strings.TrimSpace(v.Class.Type))
+					isBoat    = strings.Contains(classType, "boat")
+					isMoto    = strings.Contains(classType, "motorbike")
+				)
+
+				if !isBoat && !isMoto {
+					cars++
+
+					if !statez.IsVehicleOccupied(v) {
+						freeCars++
+					}
+				}
+			}
+
+			b.WriteString(strconv.Itoa(freeCars))
+			b.WriteString(" (из ")
+			b.WriteString(strconv.Itoa(cars))
+			b.WriteString(")\n")
 		}
 
 		b.WriteString("\n")
