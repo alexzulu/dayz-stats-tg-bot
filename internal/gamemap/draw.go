@@ -169,9 +169,10 @@ func DrawPoint(m maps.Map, p Point, opts ...DrawOption) (*image.RGBA, error) {
 	return canvas.Image(), nil
 }
 
-// overviewMapCache pools the pristine downscaled overview (map imagery only) so repeat DrawPoints calls skip
-// decoding every tile. [sync.Pool] lets the GC reclaim it under memory pressure.
-var overviewMapCache sync.Pool //nolint:gochecknoglobals // holds *mapCanvas
+// overviewMapCache pools the pristine downscaled overview (map imagery only) per map, so repeat DrawPoints
+// calls skip decoding every tile. Keyed by map name - the base canvas (pixels AND projection) is map-specific,
+// so one shared pool would serve one map's background for another. [sync.Pool] lets the GC reclaim it.
+var overviewMapCache sync.Map //nolint:gochecknoglobals // map[string]*sync.Pool, each holding *mapCanvas
 
 // DrawPoints renders the whole map, downscaled for a quick "where is everything" overview, and overlays every
 // point's marker with its top label above it and its bottom label below.
@@ -193,8 +194,11 @@ func DrawPoints(m maps.Map, points []Point, opts ...DrawOption) (*image.RGBA, er
 	// fixed factor the whole map is shrunk by for the overview
 	const downscale = 6
 
-	// reuse a pooled bare overview, or build it once (return it to the pool for the next call)
-	base, _ := overviewMapCache.Get().(*mapCanvas) //nolint:errcheck
+	// reuse a pooled bare overview for THIS map, or build it once (return it to the pool for the next call)
+	poolAny, _ := overviewMapCache.LoadOrStore(m.Name(), &sync.Pool{})
+	pool, _ := poolAny.(*sync.Pool) //nolint:errcheck
+
+	base, _ := pool.Get().(*mapCanvas) //nolint:errcheck
 	if base == nil {
 		var err error
 		if base, err = newMapCanvas(m,
@@ -205,7 +209,7 @@ func DrawPoints(m maps.Map, points []Point, opts ...DrawOption) (*image.RGBA, er
 			return nil, err
 		}
 	}
-	defer overviewMapCache.Put(base)
+	defer pool.Put(base)
 
 	canvas := base.Clone() // overlays go on a copy so the pooled base stays pristine
 
