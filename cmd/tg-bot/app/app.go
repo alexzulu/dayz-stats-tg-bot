@@ -24,7 +24,6 @@ type App struct{ name string }
 func NewApp(name string) *App { return &App{name: name} }
 
 const (
-	envUpdateInterval evnVar = "UPDATE_INTERVAL"
 	envCacheTTL       evnVar = "CACHE_TTL"
 	envTgBotToken     evnVar = "TG_BOT_TOKEN" //nolint:gosec // it's just a name of an env :D
 	envTgAdminIDs     evnVar = "TG_ADMIN_IDS"
@@ -37,7 +36,6 @@ func (a *App) Run(ctx context.Context, args []string) error { //nolint:funlen //
 		flags = flag.NewFlagSet(a.name, flag.ExitOnError)
 		log   = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-		updFreq       time.Duration
 		cacheTTL      time.Duration
 		tgBotTkn      string
 		tgAdminIDsStr string
@@ -45,12 +43,6 @@ func (a *App) Run(ctx context.Context, args []string) error { //nolint:funlen //
 	)
 
 	// attach flags to the flag set
-	flags.DurationVar(
-		&updFreq,
-		"update-interval",
-		envOrDur(envUpdateInterval, 5*time.Second), //nolint:mnd
-		"Interval between self-updating server status message updates [$"+envUpdateInterval.String()+"]",
-	)
 	flags.DurationVar(
 		&cacheTTL,
 		"cache-ttl",
@@ -83,8 +75,7 @@ func (a *App) Run(ctx context.Context, args []string) error { //nolint:funlen //
 		return err
 	}
 
-	// normalize update interval / cache-ttl (100ms <= updFreq <= 1h)
-	updFreq = max(100*time.Millisecond, min(updFreq, time.Hour))   //nolint:mnd
+	// normalize cache-ttl (100ms <= cacheTTL <= 1h)
 	cacheTTL = max(100*time.Millisecond, min(cacheTTL, time.Hour)) //nolint:mnd
 
 	// parse the Telegram admin IDs
@@ -129,7 +120,6 @@ func (a *App) Run(ctx context.Context, args []string) error { //nolint:funlen //
 	}
 
 	log.Info("Initialization complete",
-		slog.String("update_interval", updFreq.String()),
 		slog.String("cache_ttl", cacheTTL.String()),
 		slog.Any("tg_admin_ids", tgAdminIDs),
 		slog.String("config_file", cfgPath),
@@ -151,7 +141,7 @@ func (a *App) Run(ctx context.Context, args []string) error { //nolint:funlen //
 	go func() {
 		defer close(updaterClosed)
 
-		telegram.NewStatusUpdater(tgLog, tgBot, cfg, cp, updFreq).Run(ctx)
+		telegram.NewStatusUpdater(log.With(slog.String("scope", "telegram-status")), tgBot, cfg, cp).Run(ctx)
 	}()
 
 	defer func(t time.Time) { log.Info("Exiting", slog.String("uptime", time.Since(t).String())) }(time.Now())

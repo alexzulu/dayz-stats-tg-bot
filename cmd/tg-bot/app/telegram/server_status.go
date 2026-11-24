@@ -27,48 +27,46 @@ import (
 //
 // The config is the single source of truth for what to update.
 type StatusUpdater struct {
-	log     *slog.Logger
-	tb      *bot.Telegram
-	cf      *config.File
-	cp      *statez.CachedClientPool
-	updFreq time.Duration
+	log *slog.Logger
+	tb  *bot.Telegram
+	cf  *config.File
+	cp  *statez.CachedClientPool
 }
 
-// NewStatusUpdater returns a StatusUpdater that refreshes bound messages every updFreq.
-func NewStatusUpdater(
-	log *slog.Logger,
-	tb *bot.Telegram,
-	cf *config.File,
-	cp *statez.CachedClientPool,
-	updFreq time.Duration,
-) *StatusUpdater {
-	return &StatusUpdater{
-		log:     log,
-		tb:      tb,
-		cf:      cf,
-		cp:      cp,
-		updFreq: updFreq,
-	}
+// NewStatusUpdater returns a StatusUpdater for the bound live-status messages.
+func NewStatusUpdater(log *slog.Logger, tb *bot.Telegram, cf *config.File, cp *statez.CachedClientPool) *StatusUpdater {
+	return &StatusUpdater{log: log, tb: tb, cf: cf, cp: cp}
 }
 
-// Run refreshes all bound messages immediately, then every updFreq. It blocks until ctx is canceled, so callers
-// should run it in its own goroutine.
-func (u *StatusUpdater) Run(ctx context.Context) {
-	t := time.NewTimer(0) // fire immediately, then every updFreq
-	defer t.Stop()
+// Run drives the whole update cycle: it owns the timer, derives a safe refresh rate from the config on every
+// tick, edits each bound message, drops the ones whose message is gone, and backs off when Telegram rate-limits
+// us. It blocks until ctx is canceled, so callers should run it in its own goroutine. On exit it marks every
+// bound message as offline.
+func (u *StatusUpdater) Run(ctx context.Context) { //nolint:funlen
+	const (
+		idleInterval = 5 * time.Second // re-check the config this often while nothing is bound
+		softGroupCap = 18              // edits/min we allow per group - Telegram's hard cap is 20
+		editReserve  = 3               // edits/min kept free per group for /bind (send+edit+pin) and the offline sweep
+	)
 
+	// on shutdown, mark every bound message as offline (best-effort, in parallel so one slow edit can't stall the
+	// whole shutdown)
 	defer func() {
+		tbot, err := u.tb.Bot()
+		if err != nil {
+			return
+		}
+
 		var wg sync.WaitGroup
 
 		for _, liveMsg := range u.cf.Config().LiveStatusMessages {
 			wg.Go(func() {
-				tbot, err := u.tb.Bot() // fetched per tick
-				if err != nil {
-					return
-				}
-
 				if editErr := u.updateStatusMessageOffline(tbot, liveMsg); editErr != nil {
-					u.log.Error("server status updater: failed to mark message as offline")
+					u.log.Error("server status updater: failed to mark message as offline",
+						slog.Int64("chat_id", liveMsg.ChatID),
+						slog.Int("message_id", liveMsg.MessageID),
+						slog.String("error", editErr.Error()),
+					)
 				}
 			})
 		}
@@ -76,49 +74,55 @@ func (u *StatusUpdater) Run(ctx context.Context) {
 		wg.Wait()
 	}()
 
+	timer := time.NewTimer(0) // fire immediately
+	defer timer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
-			u.refresh(ctx)
-
-			t.Reset(u.updFreq)
-		}
-	}
-}
-
-// refresh updates all bound messages concurrently, then drops in one pass any binding whose message turned out to
-// be gone.
-func (u *StatusUpdater) refresh(ctx context.Context) {
-	tbot, err := u.tb.Bot() // fetched per tick, not stored - the wrapper may replace the client on a restart
-	if err != nil {
-		u.log.Error("server status updater: bot unavailable", slog.String("error", err.Error()))
-
-		return
-	}
-
-	cfg := u.cf.Config()
-	if len(cfg.LiveStatusMessages) == 0 {
-		return
-	}
-
-	var (
-		wg    sync.WaitGroup
-		mu    sync.Mutex
-		stale []config.ConfigLiveStatusMessage // bindings whose message is gone, dropped after the fan-out
-	)
-
-	for _, liveMsg := range cfg.LiveStatusMessages {
-		serverCfg, ok := cfg.Servers[liveMsg.ServerName]
-		if !ok {
-			continue // server was removed; /remove already drops its bindings, so just skip
+		case <-timer.C:
 		}
 
-		client := u.cp.Get(serverCfg)
+		tbot, err := u.tb.Bot() // fetched per tick, not stored - the wrapper may replace the client on a restart
+		if err != nil {
+			timer.Reset(idleInterval)
 
-		wg.Go(func() {
-			players, world, apiErr := u.fetchServerData(ctx, client)
+			continue
+		}
+
+		cfg := u.cf.Config()
+		if len(cfg.LiveStatusMessages) == 0 {
+			timer.Reset(idleInterval)
+
+			continue
+		}
+
+		// the chat with the most bound messages sets the pace - it must stay under the cap, and we apply the same
+		// rate to everyone for simplicity (chats with fewer messages just update a bit slower than they could)
+		perChat := make(map[int64]int)
+		maxPerChat := 1
+
+		for _, m := range cfg.LiveStatusMessages {
+			perChat[m.ChatID]++
+			maxPerChat = max(maxPerChat, perChat[m.ChatID])
+		}
+
+		interval := time.Minute / time.Duration(max(1, (softGroupCap-editReserve)/maxPerChat))
+
+		var (
+			stale       []config.ConfigLiveStatusMessage // messages that no longer exist, dropped below
+			flood       tele.FloodError                  // set when Telegram rate-limits us
+			rateLimited bool
+		)
+
+		for _, liveMsg := range cfg.LiveStatusMessages {
+			serverCfg, ok := cfg.Servers[liveMsg.ServerName]
+			if !ok {
+				continue // server was removed
+			}
+
+			players, world, apiErr := u.fetchServerData(ctx, u.cp.Get(serverCfg))
 			if apiErr != nil {
 				u.log.Warn("server status updater: fetch failed",
 					slog.String("server", liveMsg.ServerName),
@@ -130,9 +134,9 @@ func (u *StatusUpdater) refresh(ctx context.Context) {
 			case editErr == nil, u.isNotModified(editErr):
 				// already up to date, nothing to do
 			case u.isMessageGone(editErr):
-				mu.Lock()
-				stale = append(stale, liveMsg) //nolint:wsl_v5 // keep the tiny critical section cuddled
-				mu.Unlock()
+				stale = append(stale, liveMsg)
+			case errors.As(editErr, &flood):
+				rateLimited = true
 			default:
 				u.log.Error("server status updater: edit failed",
 					slog.String("server", liveMsg.ServerName),
@@ -141,23 +145,36 @@ func (u *StatusUpdater) refresh(ctx context.Context) {
 					slog.String("error", editErr.Error()),
 				)
 			}
-		})
-	}
 
-	wg.Wait()
+			if rateLimited {
+				break // stop editing; wait out Telegram's cooldown before the next cycle
+			}
+		}
 
-	if len(stale) > 0 {
-		u.cf.Update(func(cfg *config.Config) {
-			cfg.LiveStatusMessages = slices.DeleteFunc(cfg.LiveStatusMessages, func(m config.ConfigLiveStatusMessage) bool {
-				return slices.Contains(stale, m)
+		// drop bindings whose message is gone - the config is the source of truth
+		if len(stale) > 0 {
+			u.cf.Update(func(cfg *config.Config) {
+				cfg.LiveStatusMessages = slices.DeleteFunc(cfg.LiveStatusMessages, func(m config.ConfigLiveStatusMessage) bool {
+					return slices.Contains(stale, m)
+				})
 			})
-		})
 
-		if saveErr := u.cf.Save(); saveErr != nil {
-			u.log.Error("server status updater: failed to persist config after dropping stale bindings",
-				slog.String("error", saveErr.Error()),
+			if saveErr := u.cf.Save(); saveErr != nil {
+				u.log.Error("server status updater: failed to persist config after dropping stale bindings",
+					slog.String("error", saveErr.Error()),
+				)
+			}
+		}
+
+		// if Telegram rate-limited us, wait at least its cooldown - but never faster than our normal cadence
+		if rateLimited {
+			interval = max(interval, time.Duration(flood.RetryAfter)*time.Second)
+			u.log.Warn("server status updater: rate limited, backing off",
+				slog.String("retry_after", interval.String()),
 			)
 		}
+
+		timer.Reset(interval)
 	}
 }
 
