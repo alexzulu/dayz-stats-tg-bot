@@ -19,6 +19,7 @@ AGENTS.md
 ## Binaries
 /app
 /bot
+/tg-bot
 
 ## Temp dirs & trash
 /temp

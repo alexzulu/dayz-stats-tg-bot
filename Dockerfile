@@ -8,17 +8,19 @@ RUN set -x \
     && CGO_ENABLED=0 go build \
       -trimpath \
       -ldflags "-s -w" \
-      -o ./bot \
-      ./cmd/bot/ \
-    && ./bot -h \
+      -o ./tg-bot \
+      ./cmd/tg-bot/ \
+    && ./tg-bot -h \
     && mkdir -p /tmp/rootfs \
     && cd /tmp/rootfs \
-    && mkdir -p ./etc/ssl/certs ./bin ./tmp \
-    && echo 'appuser:x:10001:10001::/nonexistent:/sbin/nologin' > ./etc/passwd \
+    && mkdir -p ./etc/ssl/certs ./bin ./tmp ./data \
+    && echo 'appuser:x:10001:10001::/data:/sbin/nologin' > ./etc/passwd \
     && echo 'appuser:x:10001:' > ./etc/group \
     && cp /etc/ssl/certs/ca-certificates.crt ./etc/ssl/certs/ \
     && chmod 1777 ./tmp \
-    && mv /src/bot ./bin/bot
+    && chown 10001:10001 ./data \
+    && chmod 0700 ./data \
+    && mv /src/tg-bot ./bin/tg-bot
 
 FROM scratch AS runtime
 
@@ -31,5 +33,7 @@ LABEL \
 COPY --from=compiler /tmp/rootfs /
 
 USER 10001:10001
-WORKDIR /tmp
-ENTRYPOINT ["/bin/bot"]
+WORKDIR /data
+ENV CONFIG_FILE="/data/config.json"
+VOLUME ["/data"]
+ENTRYPOINT ["/bin/tg-bot"]

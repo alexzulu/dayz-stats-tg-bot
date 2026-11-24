@@ -1,187 +1,112 @@
 # DayZ Stats Telegram Bot
 
-A Telegram bot that monitors a DayZ server and keeps a single pinned message updated with live stats: player count,
-player names, in-game time (with day/night indicator), ping, etc. When the server goes down, the message switches to
-a downtime counter; when the bot shuts down gracefully, it marks the message as offline.
+A Telegram bot for DayZ that does two things - it keeps an auto-updating message in sync with the live state of the
+game world (so a chat or topic always shows what's happening right now), and it gives admins a set of commands to
+pull the full picture on demand (players, vehicles and more, right down to a visual rendering on the in-game map).
 
-Player names are fetched via BattlEye RCon and are optional - the bot works without RCon, just without the name list.
+All the data comes from a **StateZ** HTTP API server running alongside the game server.
 
-## Requirements
+## Features
 
-- A Telegram **group with Topics (forum mode) enabled**
-- Go 1.26+ to build from source
+- **On-demand stats** - players, vehicles, etc.
+- **Map rendering** - a player/players positions on the in-game map (adding a new map is a drop-in).
+- **Live status message** - a self-updating message pinned in a group/forum topic, kept in sync with the game world.
+- **Multiserver** - manage several StateZ servers at runtime from the bot.
+- **In-memory caching** - StateZ API responses are cached with a short TTL, so bursts of commands don't hammer the daemon.
+- **Admin-only** - every command is gated by a Telegram user-ID allowlist.
 
-## Setup
+## Getting started
 
-### Create a Telegram bot
+Open [@BotFather](https://t.me/BotFather), send `/newbot`, pick a name and username. BotFather replies with the bot's
+**auth token** - save it.
 
-1. Open [@BotFather](https://t.me/BotFather) and send `/newbot`
-2. Give it a name (e.g. `DayZ Server Status`) and a username (e.g. `dayzserver_status_bot`)
-3. BotFather will reply with the bot's **auth token** - save it
+Start the bot with only the token (no admin IDs yet):
 
-### Add the bot to your group
-
-1. Add the bot as a member of your group
-2. Promote it to **admin** with the following permissions:
-   - `Manage topics`
-   - `Pin messages`
-   - `Remain anonymous`
-
-### Get your chat ID and topic (thread) ID
-
-The easiest way - forward any message from the target topic to [@idbot](https://t.me/idbot). Simply post a message with
-the text like `test` in the topic, forward it to `@idbot`, and it will reply with the chat ID and thread ID:
-
-```text
-🔎 TELEGRAM GROUP CHECK
-
-👥 Group: <your group name>
-🆔 -1001234567890 | 13 digits
+```bash
+./bot --tg-bot-token "123456789:ABCdef..."
 ```
 
-The `-1001234567890` is the **chat ID**.
+Open a private chat with the bot and send it `/ping` - it replies with your numeric Telegram  user ID (alternatively,
+forward any message to [@idbot](https://t.me/idbot)).
 
-> [!NOTE]
-> Chat IDs for supergroups are negative and start with `-100`.
+Stop the bot and start it again, passing your ID (several IDs are comma-separated):
 
-To get the **thread ID**, click on the topic title, and you will see the "Invite link" in the format
-`https://t.me/<your_group_name>/<thread_id>`. The `<thread_id>` is the topic ID.
-
-> Alternatively, you may post any message in the topic and use
-> `curl https://api.telegram.org/bot<BOT_TOKEN>/getUpdates | jq` to find all the relevant IDs in the JSON output.
-
-### First run - let the bot create its message
-
-On the very first launch, **do not** pass `--tg-message-id`. The bot will:
-
-1. Post a new message in the specified topic
-2. Pin it
-3. Print the message ID to the log
-
-```
+```bash
 ./bot \
-  --a2c-address "your.dayz.server:2302" \
   --tg-bot-token "123456789:ABCdef..." \
-  --tg-chat-id -1001234567890 \
-  --tg-thread-id 42
+  --tg-admin-ids "5551231234,5553213213"
 ```
 
-Look for the message ID in the log output:
+From now on the bot accepts commands only from the listed users, in private chats.
 
-```
-time=... level=INFO msg="The initial message is sent to Telegram chat" message_id=999
-```
+Everything else is done from inside the bot - add your StateZ servers (name + URL + token), list online players,
+inspect a player, view vehicles, and so on. Added servers are saved to the config file and survive restarts.
 
-Stop the bot (`Ctrl+C`) and note the `message_id`.
+To keep a self-updating status message in a group (or forum topic):
 
-> [!IMPORTANT]
-> The bot can only edit messages it has sent itself. If you pass someone else's message ID, edits will fail.
-
-### All subsequent runs
-
-Pass `--tg-message-id` with the value from the previous step. From this point on the bot is safe to restart as many
-times as needed - it will always update the same message.
-
-```
-./bot \
-  --a2c-address "your.dayz.server:2302" \
-  --tg-bot-token "123456789:ABCdef..." \
-  --tg-chat-id -1001234567890 \
-  --tg-thread-id 42 \
-  --tg-message-id 999
-```
-
-To also show player names, add `--rcon-address` and `--rcon-password`:
-
-```
-./bot \
-  --a2c-address "your.dayz.server:2302" \
-  --rcon-address "your.dayz.server:2306" \
-  --rcon-password "your-rcon-password" \
-  --tg-bot-token "123456789:ABCdef..." \
-  --tg-chat-id -1001234567890 \
-  --tg-thread-id 42 \
-  --tg-message-id 999
-```
-
-### Recovery
-
-If the bot's message gets deleted from the topic, repeat steps above - launch without `--tg-message-id`, grab the new
-message ID from the log, then restart with it.
+1. Create a Telegram **group** (optionally enable **Topics** if you want the message in a specific topic).
+2. Add the bot to the group and promote it to **admin** with the **Pin Messages** permission.
+3. In the target chat/topic, trigger the bot's via `/bind@<your_bot_name>` command and pick a server.
 
 ## Configuration
 
-All flags can also be set via environment variables where noted.
+Every flag has an environment-variable fallback.
 
-`--a2c-address` is required. `--rcon-address` is optional (enables player names).
+| Flag             | Env variable   | Default                              | Description                                                      |
+|------------------|----------------|--------------------------------------|------------------------------------------------------------------|
+| `--tg-bot-token` | `TG_BOT_TOKEN` | -                                    | Telegram bot auth token from `@BotFather` (**required**)         |
+| `--tg-admin-ids` | `TG_ADMIN_IDS` | -                                    | Comma-separated Telegram user IDs allowed to use the bot         |
+| `--cache-ttl`    | `CACHE_TTL`    | `5s`                                 | TTL for cached StateZ data (clamped to `100ms`..`1h`)            |
+| `--config-file`  | `CONFIG_FILE`  | `<os-config-dir>/dayz-stats-tg-bot.json` | Path to the JSON config (created automatically, no need to edit) |
 
-| Flag                | Env variable    | Default | Description                                                                                       |
-|---------------------|-----------------|---------|---------------------------------------------------------------------------------------------------|
-| `--a2c-address`     | `A2C_ADDRESS`   | -       | `host:port` of the DayZ server's A2C query interface (**required**, usually game port or `27016`) |
-| `--rcon-address`    | `RCON_ADDRESS`  | -       | `host:port` of the DayZ server's BattlEye RCon (optional, enables player names)                   |
-| `--rcon-password`   | `RCON_PASSWORD` | -       | Password for the BattlEye RCon                                                                    |
-| `--tg-bot-token`    | `TG_BOT_TOKEN`  | -       | Telegram bot auth token from `@BotFather`                                                         |
-| `--tg-chat-id`      | -               | -       | Telegram chat (group) ID                                                                          |
-| `--tg-thread-id`    | -               | `0`     | Topic (thread) ID inside the group                                                                |
-| `--tg-message-id`   | -               | `0`     | Message ID to edit (omit on first run to create a new one)                                        |
-| `--update-interval` | -               | `10s`   | How often to poll the server. Must be greater than `1s`                                           |
-
-## Building
-
-```bash
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o ./bot ./cmd/bot/
-```
+> [!NOTE]
+> An empty admin list locks everyone out - the bot starts but ignores all commands.
 
 ## Installing
 
 ### Running on a VPS/VDS with systemd
 
-This guide covers deploying the bot as a systemd service on a Linux VPS. All commands are run as root.
+Deploy the bot as a systemd service on a Linux server (make sure it has access to the Telegram API first!).
+All commands are run as root.
 
 ```bash
 # create a dedicated system user
-useradd --system --home-dir /home/telegram-bot --create-home --shell /usr/sbin/nologin telegram-bot
+useradd --system --home-dir /home/dayz-stats-tg-bot --create-home --shell /usr/sbin/nologin dayz-stats-tg-bot
 
 # download and extract the latest release binary
-curl -fsSL "https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest/download/bot-linux-amd64.tar.gz" \
-  | tar -xzf - -C /home/telegram-bot/
+curl -fsSL "https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest/download/tg-bot-linux-amd64.tar.gz" \
+  | tar -xzf - -C /home/dayz-stats-tg-bot/
 
 # set the correct owner and make it executable
-chown telegram-bot:telegram-bot /home/telegram-bot/bot
-chmod 755 /home/telegram-bot/bot
-
-# create the log file
-touch /var/log/bot.log
-chmod 644 /var/log/bot.log
+chown dayz-stats-tg-bot:dayz-stats-tg-bot /home/dayz-stats-tg-bot/tg-bot
+chmod 755 /home/dayz-stats-tg-bot/tg-bot
 
 # create the systemd unit file
-nano /etc/systemd/system/bot.service
+nano /etc/systemd/system/tg-bot.service
 ```
 
 ```ini
 [Unit]
-Description=Telegram Bot
+Description=DayZ Stats Telegram Bot
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=telegram-bot
-Group=telegram-bot
-WorkingDirectory=/home/telegram-bot
+User=dayz-stats-tg-bot
+Group=dayz-stats-tg-bot
+WorkingDirectory=/home/dayz-stats-tg-bot
 Environment="TG_BOT_TOKEN=1234567890:XXXXXXXXXXXXXXXXX"
-Environment="RCON_PASSWORD=your-rcon-password"
-ExecStart=/home/telegram-bot/bot --a2c-address 123.123.123.123:27016 --rcon-address 123.123.123.123:2306 --tg-thread-id 11 --tg-chat-id -1002222222222 --tg-message-id 33
+Environment="TG_ADMIN_IDS=5551231234"
+ExecStart=/home/dayz-stats-tg-bot/tg-bot
 
 Restart=on-failure
 RestartSec=5
 
-StandardOutput=append:/var/log/bot.log
-StandardError=append:/var/log/bot.log
-
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
+ReadWritePaths=/home/dayz-stats-tg-bot
 PrivateTmp=true
 
 [Install]
@@ -191,36 +116,9 @@ WantedBy=multi-user.target
 ```bash
 # reload systemd to pick up the new unit, then enable and start the service
 systemctl daemon-reload
-systemctl enable --now bot.service
-systemctl status bot.service
-
-# check the logs to confirm the bot is running
-tail -f /var/log/bot.log
-
-# create a logrotate config for the bot logs
-nano /etc/logrotate.d/bot
+systemctl enable --now tg-bot.service
+systemctl status tg-bot.service
 ```
-
-```text
-/var/log/bot.log {
-    weekly
-    rotate 8
-    compress
-    delaycompress
-    missingok
-    notifempty
-    copytruncate
-}
-```
-
-```bash
-logrotate -d /etc/logrotate.d/bot # dry-run to check the config is valid
-logrotate -f /etc/logrotate.d/bot # force an immediate rotation
-```
-
-> [!NOTE]
-> On some Ubuntu installations `/var/log` is group-writable, which causes logrotate to fail with
-> `error: skipping "/var/log/bot.log" because parent directory has insecure permissions`. Fix: `chmod 755 /var/log`
 
 ### Updating the bot
 
@@ -228,18 +126,27 @@ logrotate -f /etc/logrotate.d/bot # force an immediate rotation
 # all the commands below are run as root
 
 # download the new binary into /tmp, then swap it in
-curl -fsSL "https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest/download/bot-linux-amd64.tar.gz" \
+curl -fsSL "https://github.com/alexzulu/dayz-stats-tg-bot/releases/latest/download/tg-bot-linux-amd64.tar.gz" \
   | tar -xzf - -C /tmp/
-mv /tmp/bot /home/telegram-bot/bot-new
+mv /tmp/tg-bot /home/dayz-stats-tg-bot/tg-bot-new
 
 # stop the running service, replace the binary, and start it back
-systemctl stop bot.service
-mv /home/telegram-bot/bot-new /home/telegram-bot/bot
-chown telegram-bot:telegram-bot /home/telegram-bot/bot
-chmod 755 /home/telegram-bot/bot
-systemctl start bot.service
-systemctl status bot.service
-
-# check the logs to confirm it came back up cleanly
-tail -f /var/log/bot.log
+systemctl stop tg-bot.service
+mv /home/dayz-stats-tg-bot/tg-bot-new /home/dayz-stats-tg-bot/tg-bot
+chown dayz-stats-tg-bot:dayz-stats-tg-bot /home/dayz-stats-tg-bot/tg-bot
+chmod 755 /home/dayz-stats-tg-bot/bot
+systemctl start tg-bot.service
+systemctl status tg-bot.service
 ```
+
+## Maps
+
+Game maps are embedded into the binary. Each map lives under `internal/gamemap/maps/<name>/` and is resolved by the
+StateZ world name (`chernarusplus`, `nasdara`). Tiles and the generated `info.go` are produced by:
+
+```bash
+go generate ./...
+```
+
+Generation is sticky - existing tiles are never re-downloaded and an existing `info.go` is never regenerated. To add a
+new map, create its package and run the generator; to refresh an existing one, delete its `tiles/` dir or `info.go` first.
