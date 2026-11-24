@@ -135,7 +135,7 @@ mv /tmp/tg-bot /home/dayz-stats-tg-bot/tg-bot-new
 systemctl stop tg-bot.service
 mv /home/dayz-stats-tg-bot/tg-bot-new /home/dayz-stats-tg-bot/tg-bot
 chown dayz-stats-tg-bot:dayz-stats-tg-bot /home/dayz-stats-tg-bot/tg-bot
-chmod 755 /home/dayz-stats-tg-bot/bot
+chmod 755 /home/dayz-stats-tg-bot/tg-bot
 systemctl start tg-bot.service
 systemctl status tg-bot.service
 ```
