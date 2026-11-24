@@ -107,7 +107,7 @@ linters:
     godox: {keywords: [BUG, HACK]}
     copyloopvar: {check-alias: true}
     dogsled: {max-blank-identifiers: 3}
-    exhaustive: {check: [switch, map]}
+    exhaustive: {check: [switch, mapliteral]}
     goconst: {min-occurrences: 4}
     gosec: {excludes: [G102, G104]}
     govet: {enable: [defers, errorsas, slog, tests, shadow, nilness, unusedwrite, waitgroup]}

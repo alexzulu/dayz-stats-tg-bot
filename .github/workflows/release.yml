@@ -50,19 +50,19 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with: {go-version-file: go.mod}
-      - run: go build -trimpath -ldflags "-s -w" -o ./bot${{ matrix.os == 'windows' && '.exe' || '' }} ./cmd/bot/
+      - run: go build -trimpath -ldflags "-s -w" -o ./tg-bot${{ matrix.os == 'windows' && '.exe' || '' }} ./cmd/tg-bot/
         env: {CGO_ENABLED: 0, GOOS: '${{ matrix.os }}', GOARCH: '${{ matrix.arch }}'}
       - run: |
           ext="${{ matrix.os == 'windows' && '.exe' || '' }}"
-          tar czf "bot-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "bot${ext}"
-          zip "bot-${{ matrix.os }}-${{ matrix.arch }}.zip" "bot${ext}"
+          tar czf "tg-bot-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "tg-bot${ext}"
+          zip "tg-bot-${{ matrix.os }}-${{ matrix.arch }}.zip" "tg-bot${ext}"
       - uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: bot-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          file: tg-bot-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
           tag: ${{ github.ref }}
       - uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: bot-${{ matrix.os }}-${{ matrix.arch }}.zip
+          file: tg-bot-${{ matrix.os }}-${{ matrix.arch }}.zip
           tag: ${{ github.ref }}
