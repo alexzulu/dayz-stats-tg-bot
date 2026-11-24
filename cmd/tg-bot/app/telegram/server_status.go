@@ -211,7 +211,7 @@ func (*StatusUpdater) fetchServerData(
 // the StateZ daemon could not be reached.
 //
 // It returns the raw telebot edit error so the caller can tell a gone message from a transient failure.
-func (*StatusUpdater) updateStatusMessage(
+func (*StatusUpdater) updateStatusMessage( //nolint:funlen
 	tb *tele.Bot,
 	live config.ConfigLiveStatusMessage,
 	players *api.Players,
