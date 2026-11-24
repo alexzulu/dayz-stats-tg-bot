@@ -50,6 +50,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with: {go-version-file: go.mod}
+      - run: go generate ./...
       - run: go build -trimpath -ldflags "-s -w" -o ./tg-bot${{ matrix.os == 'windows' && '.exe' || '' }} ./cmd/tg-bot/
         env: {CGO_ENABLED: 0, GOOS: '${{ matrix.os }}', GOARCH: '${{ matrix.arch }}'}
       - run: |
