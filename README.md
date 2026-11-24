@@ -4,7 +4,8 @@ A Telegram bot for DayZ that does two things - it keeps an auto-updating message
 game world (so a chat or topic always shows what's happening right now), and it gives admins a set of commands to
 pull the full picture on demand (players, vehicles and more, right down to a visual rendering on the in-game map).
 
-All the data comes from a **StateZ** HTTP API server running alongside the game server.
+All the data comes from a [**StateZ** HTTP API server](https://github.com/tarampampam/dayz-statez) running alongside
+the game server.
 
 ## Features
 
